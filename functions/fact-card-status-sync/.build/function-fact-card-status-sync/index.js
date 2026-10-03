@@ -1,6 +1,5 @@
 import { createPostEngineFromClient } from "./index2.js";
 import { regenerationHandler } from "./index6.js";
-import { restartLegacyRejection } from "./index7.js";
 import { createClient } from "@sanity/client";
 import { documentEventHandler } from "@sanity/functions";
 import { ENGINE_API_VERSION } from "@sanity/workflow-engine";
@@ -17,9 +16,20 @@ var handler = documentEventHandler(async ({ context, event }) => {
 	const engine = createPostEngineFromClient(client, {
 		"regenerate-post": regenerationHandler(client),
 		"retry-regenerate-post": regenerationHandler(client)
-	}, async (_params, ctx) => {
-		const replacementId = await restartLegacyRejection(client, engine, ctx.instanceId);
-		if (replacementId) for (let pass = 0; pass < 4; pass++) await engine.drainEffects({ instanceId: replacementId });
+	}, async (params, ctx) => {
+		const instance = await client.getDocument(ctx.instanceId);
+		if (!instance || instance.definitionSnapshot.includes("regenerate-post")) return;
+		const revisionNote = instance.fields.find((field) => field.name === "revisionNote")?.value;
+		await regenerationHandler(client)({
+			...params,
+			revisionNote
+		}, ctx);
+		await engine.fireAction({
+			instanceId: ctx.instanceId,
+			activity: "generate",
+			action: "submit",
+			idempotencyKey: `replacement-submit-${ctx.effectKey}`
+		});
 	});
 	for (let pass = 0; pass < 4; pass++) {
 		await engine.drainEffects({ instanceId: event.data._id });
