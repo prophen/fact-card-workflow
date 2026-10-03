@@ -1,4 +1,5 @@
-import {createPostEngine} from './runtime'
+import {createPostEngineFromClient} from './runtime'
+import {regenerationHandler} from '../../functions/fact-card-status-sync/regenerate'
 import {createClient} from '@sanity/client'
 import {ENGINE_API_VERSION} from '@sanity/workflow-engine'
 import process from 'node:process'
@@ -19,9 +20,14 @@ async function drain() {
     {},
     {perspective: 'raw'},
   )
-  const engine = createPostEngine(token)
-  for (const instanceId of ids) await engine.drainEffects({instanceId})
-  console.log('Fact-card status effects drained.')
+  const engine = createPostEngineFromClient(client, {
+    'regenerate-post': regenerationHandler(client),
+    'retry-regenerate-post': regenerationHandler(client),
+  })
+  for (const instanceId of ids) {
+    for (let pass = 0; pass < 4; pass++) await engine.drainEffects({instanceId})
+  }
+  console.log('Fact-card workflow effects drained.')
 }
 
 drain().catch((error: unknown) => {

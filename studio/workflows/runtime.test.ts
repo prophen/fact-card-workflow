@@ -37,7 +37,7 @@ test('background drainer syncs rejection, approval and terminal publication to t
       },
     ],
   })
-  const engine = createPostEngineFromClient(bench.client as unknown as SanityClient, {'regenerate-post': async () => {}})
+  const engine = createPostEngineFromClient(bench.client as unknown as SanityClient, {'regenerate-post': async () => { /* Simulate a completed replacement upload. */ }})
   const editor = {kind: 'person' as const, id: 'greviewer', roles: ['administrator']}
   async function checkStatus(expected: string) {
     await engine.drainEffects({instanceId: instance._id})

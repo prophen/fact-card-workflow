@@ -6,7 +6,9 @@
     "web:dev": "npm --prefix web run dev",
     "runtime:plan": "studio/node_modules/.bin/sanity blueprints plan",
     "runtime:deploy": "studio/node_modules/.bin/sanity blueprints deploy",
-    "runtime:info": "studio/node_modules/.bin/sanity blueprints info"
+    "runtime:info": "studio/node_modules/.bin/sanity blueprints info",
+    "runtime:check": "studio/node_modules/.bin/tsc -p tsconfig.runtime.json",
+    "runtime:configure": "node --env-file=web/.env.local scripts/configure-generation-runtime.mjs"
   },
   "dependencies": {
     "@fontsource/libre-baskerville": "^5.3.0",

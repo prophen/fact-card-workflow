@@ -38,7 +38,6 @@ function regenerationHandler(client) {
 				note: params.revisionNote,
 				previousFact: post.factText || ""
 			});
-			if (generated.factText.trim() === post.factText?.trim()) throw new Error("The replacement repeated the original fact. Try again with more specific feedback.");
 			const png = await renderCard(generated.factText, post.renderTemplate || "defaultFactCard");
 			if (!await isCurrent()) throw new Error("The workflow changed while generating the replacement.");
 			const asset = await client.assets.upload("image", png, {

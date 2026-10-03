@@ -19,13 +19,13 @@ export function regenerationHandler(client: SanityClient): EffectHandler {
       {id: ctx.instanceId, key: ctx.effectKey}, {perspective: 'raw'},
     )
     if (!(await isCurrent())) throw new Error('Replacement generation is no longer current.')
-    let post = await client.getDocument<Post>(draftId)
+    let post: Post | undefined = await client.getDocument<Post>(draftId)
     if (!post) {
       const published = await client.getDocument<Post>(id)
       if (!published) throw new Error('The post no longer exists.')
       const {_rev, ...content} = published
       void _rev
-      post = await client.createIfNotExists({...content, _id: draftId}) as Post
+      post = await client.createIfNotExists({...content, _id: draftId})
     }
     // A replay after writing the complete card resumes workflow completion without paying again.
     if (post.regenerationKey === ctx.effectKey) return
@@ -39,8 +39,6 @@ export function regenerationHandler(client: SanityClient): EffectHandler {
       const generated = await generatePost(post.topic!, {
         openaiKey, exaKey, model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
       }, fetch, {note: params.revisionNote, previousFact: post.factText || ''})
-      if (generated.factText.trim() === post.factText?.trim())
-        throw new Error('The replacement repeated the original fact. Try again with more specific feedback.')
       const png = await renderCard(generated.factText, post.renderTemplate || cardTemplate)
       if (!(await isCurrent())) throw new Error('The workflow changed while generating the replacement.')
       const asset = await client.assets.upload('image', png, {

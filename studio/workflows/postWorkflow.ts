@@ -27,7 +27,7 @@ export const postWorkflow = defineWorkflow({
       initialValue: {type: 'input'},
     }),
     defineField({name: 'approvedBy', type: 'actor'}),
-    defineField({name: 'revisionNote', type: 'string'}),
+    defineField({name: 'revisionNote', type: 'string', initialValue: {type: 'input'}}),
   ],
   stages: [
     defineStage({

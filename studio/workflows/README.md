@@ -3,7 +3,7 @@
 The `post` document contains one fact, its verified source, a Facebook caption,
 the CBS Post Generator template ID, and an uploaded template-rendered PNG.
 The workflow is `generating → inReview → approved → published`. Rejecting a card
-returns it to generating with a revision note. Every card requires human approval.
+returns it to generating with a revision note and queues automatic regeneration. Every card requires human approval.
 
 The existing `factCard` type is retained for existing content and the earlier web
 demo. The new workflow applies only to `post`. There are no array fields in this
@@ -29,7 +29,7 @@ the status-sync effect handler. Keep tokens out of Studio/browser code.
 Use the official engine's `refDataset` helper for the `post` subject.
 
 The generation agent writes `factText`, `source`, `caption`, and `renderTemplate`,
-renders a PNG with the CBS template service, uploads that PNG with the Sanity
+renders a PNG with the shared CBS template renderer, uploads that PNG with the Sanity
 assets API, and writes its asset reference to `image`. It then calls:
 
 ```ts
@@ -50,7 +50,7 @@ After approval, the demo's `publish/mark-published` action records that scheduli
 or publication has been confirmed. It does not publish to Facebook or publish
 the Sanity draft. `published` has no activities or outgoing transitions.
 
-The engine stage is authoritative. `status` is a read-only mirror updated by the
+The engine stage is authoritative. `status` is a mirror updated by the
 `sync-*-status` effects. The deployed `fact-card-status-sync` Sanity Function drains
 new effects automatically after workflow actions, including Studio review actions.
 There is no need to run the manual drainer after normal transitions. Keep
