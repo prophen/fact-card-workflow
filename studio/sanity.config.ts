@@ -3,6 +3,7 @@ import {structureTool} from 'sanity/structure'
 import {visionTool} from '@sanity/vision'
 import {schemaTypes} from './schemaTypes'
 import {workflowDefaultDocumentNode, workflowStudioPlugin} from '@sanity/workflow-studio-plugin'
+import {GeneratePostTool} from './tools/GeneratePostTool'
 
 export default defineConfig({
   name: 'default',
@@ -30,4 +31,5 @@ export default defineConfig({
   schema: {
     types: schemaTypes,
   },
+  tools: [{name: 'generate-post', title: 'Generate post', component: GeneratePostTool}],
 })

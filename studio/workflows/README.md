@@ -36,9 +36,10 @@ assets API, and writes its asset reference to `image`. It then calls:
 await engine.fireAction({instanceId, activity: 'generate', action: 'submit'})
 ```
 
-Submission requires the completed fields. Use a contributor token for the agent. Exa and CBS
-service calls are integration points, not implemented or simulated by this setup.
-No AI image generator is used.
+Submission requires the completed fields. Use a contributor token for an external
+agent. Studio's Generate post tool now supplies generation, Exa evidence checking,
+caption creation, and template rendering through the web app's server endpoint.
+See the root README for provider configuration. No AI image generator is used.
 
 In Studio, a person clicks Approve or Reject. Reject requires feedback. Approval
 records the acting person. Review actions require the administrator or editor project role. Keep the agent
@@ -55,7 +56,7 @@ new effects automatically after workflow actions, including Studio review action
 There is no need to run the manual drainer after normal transitions. Keep
 `npm run workflows:drain` with the server-only `SANITY_AUTH_TOKEN` for backlog or
 interrupted-job recovery. Runtime configuration and deployment commands live at
-the repository root; see `../README.md`.
+the repository root; see `../../README.md`.
 The helper reads the current stage so queued old updates do not intentionally
 restore an earlier status; concurrent raw content edits still require normal
 production coordination.

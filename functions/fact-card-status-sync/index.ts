@@ -2,6 +2,7 @@ import {createClient} from '@sanity/client'
 import {documentEventHandler} from '@sanity/functions'
 import {ENGINE_API_VERSION} from '@sanity/workflow-engine'
 import {createPostEngineFromClient} from '../../studio/workflows/runtime'
+import {regenerationHandler} from './regenerate'
 
 export const handler = documentEventHandler<{_id: string}>(async ({context, event}) => {
   const {projectId, dataset} = context.clientOptions
@@ -14,5 +15,8 @@ export const handler = documentEventHandler<{_id: string}>(async ({context, even
     perspective: 'raw',
     useCdn: false,
   })
-  await createPostEngineFromClient(client).drainEffects({instanceId: event.data._id})
+  await createPostEngineFromClient(client, {
+    'regenerate-post': regenerationHandler(client),
+    'retry-regenerate-post': regenerationHandler(client),
+  }).drainEffects({instanceId: event.data._id})
 })

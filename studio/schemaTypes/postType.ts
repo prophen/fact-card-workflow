@@ -6,6 +6,12 @@ export const postType = defineType({
   type: 'document',
   initialValue: {status: 'generating'},
   fields: [
+    defineField({
+      name: 'generationError', title: 'Replacement generation error', type: 'text', readOnly: true,
+      hidden: ({document}) => !document?.generationError,
+      description: 'Correct the issue, then use Retry generating replacement in the Workflow tab.',
+    }),
+    defineField({name: 'regenerationKey', type: 'string', hidden: true, readOnly: true}),
     defineField({name: 'topic', title: 'Topic', type: 'string'}),
     defineField({
       name: 'factText',

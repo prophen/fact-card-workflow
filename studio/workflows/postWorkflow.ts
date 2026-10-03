@@ -8,6 +8,10 @@ import {
 } from '@sanity/workflow-engine/define'
 
 const syncStatus = (name: string) => ({name, bindings: {subject: '$fields.subject._id'}})
+const regenerate = {
+  name: 'regenerate-post',
+  bindings: {subject: '$fields.subject._id', revisionNote: '$fields.revisionNote'},
+}
 
 export const postWorkflow = defineWorkflow({
   name: 'post-workflow',
@@ -35,12 +39,33 @@ export const postWorkflow = defineWorkflow({
           title: 'Generate and verify one fact; render and upload the template PNG',
           actions: [
             defineAction({
+              name: 'regenerate',
+              title: 'Generate a replacement using your feedback',
+              when: "defined($fields.revisionNote) && !defined($effectStatus['regenerate-post'])",
+              effects: [regenerate],
+            }),
+            defineAction({
+              name: 'retry-regeneration',
+              title: 'Retry generating replacement',
+              roles: ['administrator', 'editor'],
+              filter: "$effectStatus['regenerate-post'] == 'failed' && (!defined($effectStatus['retry-regenerate-post']) || $effectStatus['retry-regenerate-post'] == 'failed')",
+              effects: [{...regenerate, name: 'retry-regenerate-post'}],
+            }),
+            defineAction({
               name: 'submit',
               title: 'Submit completed card for review',
               filter:
-                'defined($fields.subject.factText) && defined($fields.subject.source.citation) && defined($fields.subject.source.url) && defined($fields.subject.caption) && defined($fields.subject.renderTemplate) && defined($fields.subject.image.asset._ref)',
+                "(!defined($fields.revisionNote) || ($effectStatus['regenerate-post'] == 'done' || $effectStatus['retry-regenerate-post'] == 'done')) && defined($fields.subject.factText) && defined($fields.subject.source.citation) && defined($fields.subject.source.url) && defined($fields.subject.caption) && defined($fields.subject.renderTemplate) && defined($fields.subject.image.asset._ref)",
               status: 'done',
               effects: [syncStatus('sync-review-status')],
+              ops: [{type: 'field.unset', target: {field: 'approvedBy'}}],
+            }),
+            defineAction({
+              name: 'replacement-ready',
+              title: 'Replacement ready for review',
+              when: "($effectStatus['regenerate-post'] == 'done' || $effectStatus['retry-regenerate-post'] == 'done')",
+              status: 'done',
+              effects: [syncStatus('sync-regenerated-status')],
               ops: [{type: 'field.unset', target: {field: 'approvedBy'}}],
             }),
           ],

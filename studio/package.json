@@ -34,6 +34,7 @@
     "@sanity/workflow-sdk": "0.36.0",
     "@sanity/workflow-studio": "0.36.0",
     "@sanity/workflow-studio-plugin": "0.36.0",
+    "html2canvas": "^1.4.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "sanity": "^6.17.0",
