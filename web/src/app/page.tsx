@@ -1,36 +1,46 @@
-import {client} from '@/sanity/client'
-import {FACT_CARDS_QUERY} from '@/sanity/queries'
-import Link from 'next/link'
-
-const options = {next: {revalidate: 30}}
-
+import { getPosts } from '@/sanity/posts'
+import { Header } from '@/components/post-ui'
+import { PostLibrary } from '@/components/post-library'
+export const dynamic = 'force-dynamic'
 export default async function Home() {
-  const factCards = await client.fetch(FACT_CARDS_QUERY, {}, options)
-
+  const posts = await getPosts()
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-6 py-16">
-      <h1 className="text-3xl font-semibold tracking-tight">Fact Cards</h1>
-      {factCards.length === 0 ? (
-        <p>No fact cards yet. Add one in the Studio.</p>
-      ) : (
-        <ul className="flex flex-col gap-3">
-          {factCards.map((factCard) => {
-            const slug = factCard.slug?.current
-            if (!slug) return null
-
-            return (
-              <li key={factCard._id}>
-                <Link
-                  className="text-lg font-medium underline underline-offset-4"
-                  href={`/${slug}`}
-                >
-                  {factCard.title}
-                </Link>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-    </main>
+    <>
+      <Header />
+      <main className="library-main">
+        <section className="library-hero">
+          <div>
+            <p className="eyebrow">HISTORY WORTH SHARING</p>
+            <h1>
+              One fact.
+              <br />
+              <span>A lasting story.</span>
+            </h1>
+            <p className="hero-description">
+              Your California Black history collection.
+              <br />
+              Explore the facts, read the sources, and download your cards.
+            </p>
+          </div>
+          <div className="collection-note">
+            <span className="note-symbol" aria-hidden="true">
+              ✦
+            </span>
+            <p>
+              Every story starts with a fact.
+              <br />
+              Every fact deserves a source.
+            </p>
+            <span className="note-rule" />
+            <small>FACT CARDS · CALIFORNIA BLACK STORIES</small>
+          </div>
+        </section>
+        <PostLibrary posts={posts} />
+      </main>
+      <footer className="site-footer">
+        <span>California Black Stories</span>
+        <span>History. Community. Conversation.</span>
+      </footer>
+    </>
   )
 }

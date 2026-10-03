@@ -84,8 +84,9 @@ If generation fails, the draft stays in **Generating** with a visible error. Use
 workflow is still current; revision checks prevent it from overwriting edits made
 while generation was running. A recorded effect key avoids paying again when a
 completed write is replayed. Historical workflow instances keep their definition
-snapshots; rejected instances from the original demo continue in a new instance
-with the same subject and feedback, retaining the old instance's audit history.
+snapshots and original review history. Future rejections in older instances are
+handled through their existing submit action, without migrating or retiring them.
+The retry workflow action is available on posts created with the updated definition.
 
 Deploy workflow definitions with `npm --prefix studio run workflows:deploy` and
 the Function with `npm run runtime:deploy`. Then run `npm run runtime:configure`
@@ -98,3 +99,27 @@ also needs these provider settings if generation is pending.
 failed replacement retries, repeated review cycles, approval restrictions, and
 1080-square PNG output. Both initial cards and replacements share a server
 renderer using Satori and WebAssembly Resvg; card images are never AI-generated.
+
+## Post library and downloads
+
+The web app at `http://localhost:3000` shows `post` documents across all workflow
+stages, including drafts. Search by topic, fact, caption, or source, filter by
+status, and open a post to see its caption and citation. **Copy caption** copies
+Facebook-ready text. **Download image** saves the original Sanity card image,
+including its full resolution, through the app's download endpoint.
+
+Draft reads use a server-only Viewer token in `web/.env.local` under
+`SANITY_API_READ_TOKEN`. This token is never sent to the browser. This is an
+internal post library: visitors can see draft content. `NEXT_PUBLIC_SANITY_STUDIO_URL`
+controls the **Open Studio** link. Restart the web app after changing its settings.
+Missing images show a placeholder and cannot be downloaded. Reload to get current
+workflow status and newly generated images. The earlier `factCard` schema and
+legacy pages have been removed; the library uses the workflow’s `post` documents.
+
+## Publish an approved draft
+
+Approve the post in its Workflow tab, then click Studio’s **Publish** button.
+Publish stays disabled until the workflow has recorded approval. After Sanity
+publishes the draft, the deployed Function automatically completes the same
+workflow and updates its status to **Published**, even if Studio is closed.
+This publishes content in Sanity; Facebook and Buffer are outside the demo.

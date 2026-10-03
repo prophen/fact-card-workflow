@@ -4,6 +4,7 @@ import {visionTool} from '@sanity/vision'
 import {schemaTypes} from './schemaTypes'
 import {workflowDefaultDocumentNode, workflowStudioPlugin} from '@sanity/workflow-studio-plugin'
 import {GeneratePostTool} from './tools/GeneratePostTool'
+import {withWorkflowApproval} from './actions/WorkflowPublishAction'
 
 export default defineConfig({
   name: 'default',
@@ -27,6 +28,15 @@ export default defineConfig({
       ],
     }),
   ],
+
+  document: {
+    actions: (actions, context) =>
+      context.schemaType === 'post'
+        ? actions
+            .filter((action) => action.action !== 'schedule')
+            .map((action) => (action.action === 'publish' ? withWorkflowApproval(action) : action))
+        : actions,
+  },
 
   schema: {
     types: schemaTypes,

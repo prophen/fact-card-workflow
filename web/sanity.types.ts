@@ -15,40 +15,6 @@
 export declare const internalGroqTypeReferenceTo: unique symbol;
 
 // Source: schema.json
-export type FactCard = {
-  _id: string;
-  _type: "factCard";
-  _createdAt: string;
-  _updatedAt: string;
-  _rev: string;
-  title?: string;
-  slug?: Slug;
-  body?: Array<{
-    children?: Array<{
-      marks?: Array<string>;
-      text?: string;
-      _type: "span";
-      _key: string;
-    }>;
-    style?: "normal" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "blockquote";
-    listItem?: "bullet" | "number";
-    markDefs?: Array<{
-      href?: string;
-      _type: "link";
-      _key: string;
-    }>;
-    level?: number;
-    _type: "block";
-    _key: string;
-  }>;
-};
-
-export type Slug = {
-  _type: "slug";
-  current?: string;
-  source?: string;
-};
-
 export type SanityImageAssetReference = {
   _ref: string;
   _type: "reference";
@@ -62,6 +28,8 @@ export type Post = {
   _createdAt: string;
   _updatedAt: string;
   _rev: string;
+  generationError?: string;
+  regenerationKey?: string;
   topic?: string;
   factText?: string;
   source?: {
@@ -193,9 +161,13 @@ export type Geopoint = {
   alt?: number;
 };
 
+export type Slug = {
+  _type: "slug";
+  current?: string;
+  source?: string;
+};
+
 export type AllSanitySchemaTypes =
-  | FactCard
-  | Slug
   | SanityImageAssetReference
   | Post
   | SanityImageCrop
@@ -207,48 +179,62 @@ export type AllSanitySchemaTypes =
   | SanityFileAsset
   | SanityAssetSourceData
   | SanityImageAsset
-  | Geopoint;
+  | Geopoint
+  | Slug;
 
-// Source: ../web/src/sanity/queries.ts
-// Variable: FACT_CARDS_QUERY
-// Query: *[_type == "factCard" && defined(slug.current)] | order(_createdAt desc){ _id, title, slug }
-export type FACT_CARDS_QUERY_RESULT = Array<{
+// Source: ../web/src/sanity/posts.ts
+// Variable: postsQuery
+// Query: *[_type == "post"] | order(_updatedAt desc){_id, _updatedAt, topic, factText, caption, source{citation, url}, status, renderTemplate, generationError,  "image": image.asset->{url, mimeType, "width": metadata.dimensions.width, "height": metadata.dimensions.height}}
+export type PostsQueryResult = Array<{
   _id: string;
-  title: string | null;
-  slug: Slug | null;
+  _updatedAt: string;
+  topic: string | null;
+  factText: string | null;
+  caption: string | null;
+  source: {
+    citation: string | null;
+    url: string | null;
+  } | null;
+  status: "approved" | "generating" | "inReview" | "published" | null;
+  renderTemplate: string | null;
+  generationError: string | null;
+  image: {
+    url: string | null;
+    mimeType: string | null;
+    width: number | null;
+    height: number | null;
+  } | null;
 }>;
 
-// Source: ../web/src/sanity/queries.ts
-// Variable: FACT_CARD_QUERY
-// Query: *[_type == "factCard" && slug.current == $slug][0]{ _id, title, body }
-export type FACT_CARD_QUERY_RESULT = {
+// Source: ../web/src/sanity/posts.ts
+// Variable: postQuery
+// Query: *[_type == "post" && _id == $id][0]{_id, _updatedAt, topic, factText, caption, source{citation, url}, status, renderTemplate, generationError,  "image": image.asset->{url, mimeType, "width": metadata.dimensions.width, "height": metadata.dimensions.height}}
+export type PostQueryResult = {
   _id: string;
-  title: string | null;
-  body: Array<{
-    children?: Array<{
-      marks?: Array<string>;
-      text?: string;
-      _type: "span";
-      _key: string;
-    }>;
-    style?: "blockquote" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "normal";
-    listItem?: "bullet" | "number";
-    markDefs?: Array<{
-      href?: string;
-      _type: "link";
-      _key: string;
-    }>;
-    level?: number;
-    _type: "block";
-    _key: string;
-  }> | null;
+  _updatedAt: string;
+  topic: string | null;
+  factText: string | null;
+  caption: string | null;
+  source: {
+    citation: string | null;
+    url: string | null;
+  } | null;
+  status: "approved" | "generating" | "inReview" | "published" | null;
+  renderTemplate: string | null;
+  generationError: string | null;
+  image: {
+    url: string | null;
+    mimeType: string | null;
+    width: number | null;
+    height: number | null;
+  } | null;
 } | null;
 
 // Query TypeMap
 declare global {
   interface SanityQueries {
-    '*[_type == "factCard" && defined(slug.current)] | order(_createdAt desc){ _id, title, slug }': FACT_CARDS_QUERY_RESULT;
-    '*[_type == "factCard" && slug.current == $slug][0]{ _id, title, body }': FACT_CARD_QUERY_RESULT;
+    '*[_type == "post"] | order(_updatedAt desc){_id, _updatedAt, topic, factText, caption, source{citation, url}, status, renderTemplate, generationError,\n  "image": image.asset->{url, mimeType, "width": metadata.dimensions.width, "height": metadata.dimensions.height}}': PostsQueryResult;
+    '*[_type == "post" && _id == $id][0]{_id, _updatedAt, topic, factText, caption, source{citation, url}, status, renderTemplate, generationError,\n  "image": image.asset->{url, mimeType, "width": metadata.dimensions.width, "height": metadata.dimensions.height}}': PostQueryResult;
   }
 }
 // Lets @sanity/client releases that predate the global registry read it too

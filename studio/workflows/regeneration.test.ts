@@ -29,26 +29,27 @@ test('renderer emits a 1080-square PNG and rejects unknown templates',async()=>{
   await expect(renderCard('Fact','unknown')).rejects.toThrow('Unsupported')
 })
 
-test('older rejected instance keeps its history and resumes feedback in the current workflow',async()=>{
+test('older workflow rejection can resubmit without retiring its instance',async()=>{
   const {createPostEngineFromClient}=await import('./runtime')
-  const {restartLegacyRejection}=await import('../../functions/fact-card-status-sync/legacy')
   const legacy=structuredClone(postWorkflow)
   const generate=legacy.stages[0].activities![0]
   generate.actions=generate.actions!.filter(action=>action.name==='submit')
   generate.actions[0].filter='defined($fields.subject.image.asset._ref)'
-  const bench=createBench({tag:'production',workflowResource:{type:'dataset',id:'ta2gi825.production'},documents:[{_id:'old-card',_type:'post',image:{asset:{_ref:'image-original-png'}}}]})
+  const bench=createBench({tag:'production',workflowResource:{type:'dataset',id:'ta2gi825.production'},documents:[{_id:'old-card',_type:'post',status:'generating',image:{asset:{_ref:'image-original-png'}}}]})
   await bench.deployDefinitions({definitions:[legacy],expectedMinReaderModel:10})
   const {refDataset}=await import('@sanity/workflow-engine')
   const {instance}=await bench.startInstance({definition:'post-workflow',initialFields:[{type:'subject',name:'subject',value:refDataset({projectId:'ta2gi825',dataset:'production',documentId:'old-card',type:'post'})}]})
   await bench.fireAction({instanceId:instance._id,activity:'generate',action:'submit'})
   await bench.fireAction({instanceId:instance._id,activity:'review',action:'reject',actor:editor,params:{note:'Regenerate the image'}})
-  await bench.deployDefinitions({definitions:[postWorkflow],expectedMinReaderModel:10})
   const client=bench.client as unknown as import('@sanity/client').SanityClient
-  const engine=createPostEngineFromClient(client)
-  const newId=await restartLegacyRejection(client,engine,instance._id)
-  expect(newId).toBeTruthy()
-  expect(newId).not.toBe(instance._id)
-  expect(bench.snapshot().find(doc=>doc._id===instance._id)?.abortedAt).toBeTruthy()
-  const pending=await bench.findPendingEffects({instanceId:newId!})
-  expect(pending.find(effect=>effect.name==='regenerate-post')?.params.revisionNote).toBe('Regenerate the image')
+  let generated=0
+  const engine=createPostEngineFromClient(client,{},async (_params,ctx)=>{
+    generated++
+    await engine.fireAction({instanceId:ctx.instanceId,activity:'generate',action:'submit'})
+  })
+  for(let pass=0;pass<3;pass++) await engine.drainEffects({instanceId:instance._id})
+  expect(generated).toBe(1)
+  expect(await bench.currentStage(instance._id)).toBe('inReview')
+  expect(bench.snapshot().find(doc=>doc._id===instance._id)?.abortedAt).toBeUndefined()
+  expect(bench.snapshot().filter(doc=>doc._type==='sanity.workflow.instance')).toHaveLength(1)
 })

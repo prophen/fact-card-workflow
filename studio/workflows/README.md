@@ -5,9 +5,8 @@ the CBS Post Generator template ID, and an uploaded template-rendered PNG.
 The workflow is `generating → inReview → approved → published`. Rejecting a card
 returns it to generating with a revision note and queues automatic regeneration. Every card requires human approval.
 
-The existing `factCard` type is retained for existing content and the earlier web
-demo. The new workflow applies only to `post`. There are no array fields in this
-schema, so `defineArrayMember` is not needed.
+The workflow applies to `post`. There are no array fields in this schema, so
+`defineArrayMember` is not needed.
 
 ## Deploy and start
 
@@ -46,9 +45,14 @@ records the acting person. Review actions require the administrator or editor pr
 token at contributor access so it cannot approve. To restrict approval exclusively
 to the page owner, pin their account-global user ID in the action filters.
 
-After approval, the demo's `publish/mark-published` action records that scheduling
-or publication has been confirmed. It does not publish to Facebook or publish
-the Sanity draft. `published` has no activities or outgoing transitions.
+After approval, click Sanity Studio’s **Publish** button. The button checks the
+current workflow approval, while retaining Sanity’s normal validation and permissions.
+The deployed Function detects the published `post` and fires `publish/mark-published`
+on the same workflow automatically. Duplicate events are safe. No extra workflow
+click is needed. This publishes to Sanity, not Facebook. `published` has no
+activities or outgoing transitions. Scheduled publishing is hidden for this demo
+so it cannot bypass the approval check. Direct API writes remain subject to the
+project’s Content Lake permissions.
 
 The engine stage is authoritative. `status` is a mirror updated by the
 `sync-*-status` effects. The deployed `fact-card-status-sync` Sanity Function drains

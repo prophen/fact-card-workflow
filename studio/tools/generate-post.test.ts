@@ -57,3 +57,14 @@ test('surfaces provider failure instead of substituting placeholder content', as
   ) as unknown as typeof globalThis.fetch
   await expect(generatePost('schools', settings, fetch)).rejects.toThrow('429')
 })
+
+test('passes revision feedback to both drafting and evidence checking', async () => {
+  const fetch = mockFetch(checked)
+  const revision = {note: 'Use a primary source and a shorter caption', previousFact: quote}
+  await generatePost('California schools', settings, fetch, revision)
+  const calls = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
+  const draft = JSON.parse(calls[0][1].body)
+  const verification = JSON.parse(calls[2][1].body)
+  expect(JSON.parse(draft.messages[1].content).revision).toEqual(revision)
+  expect(JSON.parse(verification.messages[1].content).revision).toEqual(revision)
+})

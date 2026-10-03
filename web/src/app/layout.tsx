@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Fact Card Workflow",
-  description: "Fact cards from Sanity",
+  title: "Post Library | California Black Stories",
+  description: "Explore California Black history fact cards, captions, and sources. Download your rendered post images.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
