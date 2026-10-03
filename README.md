@@ -110,8 +110,8 @@ including its full resolution, through the app's download endpoint.
 
 Draft reads use a server-only Viewer token in `web/.env.local` under
 `SANITY_API_READ_TOKEN`. This token is never sent to the browser. This is an
-internal post library: visitors can see draft content. `NEXT_PUBLIC_SANITY_STUDIO_URL`
-controls the **Open Studio** link. Restart the web app after changing its settings.
+internal post library: visitors can see draft content. Studio is accessed separately;
+the public library does not link to it.
 Missing images show a placeholder and cannot be downloaded. Reload to get current
 workflow status and newly generated images. The earlier `factCard` schema and
 legacy pages have been removed; the library uses the workflow’s `post` documents.
@@ -123,3 +123,8 @@ Publish stays disabled until the workflow has recorded approval. After Sanity
 publishes the draft, the deployed Function automatically completes the same
 workflow and updates its status to **Published**, even if Studio is closed.
 This publishes content in Sanity; Facebook and Buffer are outside the demo.
+
+## Sanity Challenge submission
+
+See [the Path Two submission package](submission/README.md) for the DEV article
+draft, demo script, screenshots, prompt notes, and final publishing checklist.

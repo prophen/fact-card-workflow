@@ -26,14 +26,6 @@ export function Header() {
           California Black Stories<span className="brand-subtitle">POST LIBRARY</span>
         </span>
       </Link>
-      <a
-        className="studio-link"
-        href={process.env.NEXT_PUBLIC_SANITY_STUDIO_URL || 'http://localhost:3333'}
-        target="_blank"
-        rel="noreferrer"
-      >
-        Open Studio <span aria-hidden="true">↗</span>
-      </a>
     </header>
   )
 }
