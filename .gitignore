@@ -1,0 +1,21 @@
+# Local backups of the original app repositories
+/.git-backups/
+
+# Dependencies and generated output
+node_modules/
+.next/
+.sanity/
+dist/
+build/
+out/
+coverage/
+*.tsbuildinfo
+
+# Local configuration, secrets, and logs
+.env*
+!.env.example
+*.local
+*.pem
+*.log
+.DS_Store
+.vercel/
