@@ -76,7 +76,10 @@ describe('fact card approval workflow', () => {
       params: {note: 'Use a better citation'},
     })
     expect(await bench.currentStage(id)).toBe('generating')
-    await bench.fireAction({instanceId: id, activity: 'generate', action: 'submit', actor: agent})
+    await expect(bench.fireAction({instanceId: id, activity: 'generate', action: 'submit', actor: agent})).rejects.toThrow()
+    const pending = bench.snapshot().find((doc) => doc._id === id)?.pendingEffects as {name: string; params: {revisionNote?: string}}[]
+    expect(pending.find((effect) => effect.name === 'regenerate-post')?.params.revisionNote).toBe('Use a better citation')
+    await bench.completePendingEffect({instanceId: id, effect: 'regenerate-post', status: 'done'})
     expect(await bench.currentStage(id)).toBe('inReview')
     await expect(
       bench.fireAction({

@@ -15,8 +15,20 @@ export const handler = documentEventHandler<{_id: string}>(async ({context, even
     perspective: 'raw',
     useCdn: false,
   })
-  await createPostEngineFromClient(client, {
+  const engine = createPostEngineFromClient(client, {
     'regenerate-post': regenerationHandler(client),
     'retry-regenerate-post': regenerationHandler(client),
-  }).drainEffects({instanceId: event.data._id})
+  }, async (params, ctx) => {
+    // Existing instances retain their original definition snapshot. Support their rejection
+    // effect without rewriting the snapshot or erasing the previous review history.
+    const instance = await client.getDocument<{definitionSnapshot: string; fields: {name: string; value: unknown}[]}>(ctx.instanceId)
+    if (!instance || instance.definitionSnapshot.includes('regenerate-post')) return
+    const revisionNote = instance.fields.find((field) => field.name === 'revisionNote')?.value
+    await regenerationHandler(client)({...params, revisionNote}, ctx)
+    await engine.fireAction({
+      instanceId: ctx.instanceId, activity: 'generate', action: 'submit',
+      idempotencyKey: `replacement-submit-${ctx.effectKey}`,
+    })
+  })
+  await engine.drainEffects({instanceId: event.data._id})
 })

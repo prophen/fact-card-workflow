@@ -1,7 +1,7 @@
 import "@sanity/client";
 import { createEngine, extractDocumentId } from "@sanity/workflow-engine";
 //#region studio/workflows/runtime.ts
-function createPostEngineFromClient(client) {
+function createPostEngineFromClient(client, handlers = {}, onRejected) {
 	const syncPostStatus = async (params, ctx) => {
 		if (typeof params.subject !== "string") throw new Error("Expected a subject GDR URI");
 		const stage = await client.fetch("*[_id == $id][0].currentStage", { id: ctx.instanceId }, { perspective: "raw" });
@@ -32,9 +32,14 @@ function createPostEngineFromClient(client) {
 		},
 		effects: { handlers: {
 			"sync-review-status": syncPostStatus,
+			"sync-regenerated-status": syncPostStatus,
 			"sync-approved-status": syncPostStatus,
-			"sync-rejected-status": syncPostStatus,
-			"sync-published-status": syncPostStatus
+			"sync-rejected-status": async (params, ctx) => {
+				await syncPostStatus(params, ctx);
+				if (onRejected) await onRejected(params, ctx);
+			},
+			"sync-published-status": syncPostStatus,
+			...handlers
 		} }
 	});
 }

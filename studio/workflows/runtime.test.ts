@@ -37,7 +37,7 @@ test('background drainer syncs rejection, approval and terminal publication to t
       },
     ],
   })
-  const engine = createPostEngineFromClient(bench.client as unknown as SanityClient)
+  const engine = createPostEngineFromClient(bench.client as unknown as SanityClient, {'regenerate-post': async () => {}})
   const editor = {kind: 'person' as const, id: 'greviewer', roles: ['administrator']}
   async function checkStatus(expected: string) {
     await engine.drainEffects({instanceId: instance._id})
@@ -54,8 +54,7 @@ test('background drainer syncs rejection, approval and terminal publication to t
     actor: editor,
     params: {note: 'Revise the source'},
   })
-  await checkStatus('generating')
-  await bench.fireAction({instanceId: instance._id, activity: 'generate', action: 'submit'})
+  expect(await bench.currentStage(instance._id)).toBe('generating')
   await checkStatus('inReview')
   await bench.fireAction({
     instanceId: instance._id,

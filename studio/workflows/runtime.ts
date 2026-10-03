@@ -18,7 +18,7 @@ export function createPostEngine(token: string) {
   return createPostEngineFromClient(client)
 }
 
-export function createPostEngineFromClient(client: SanityClient, handlers: Record<string, EffectHandler> = {}) {
+export function createPostEngineFromClient(client: SanityClient, handlers: Record<string, EffectHandler> = {}, onRejected?: EffectHandler) {
   const syncPostStatus: EffectHandler = async (params, ctx) => {
     if (typeof params.subject !== 'string') throw new Error('Expected a subject GDR URI')
     // Read the current stage rather than a queued literal: delayed effects cannot restore an old status.
@@ -50,7 +50,10 @@ export function createPostEngineFromClient(client: SanityClient, handlers: Recor
         'sync-review-status': syncPostStatus,
         'sync-regenerated-status': syncPostStatus,
         'sync-approved-status': syncPostStatus,
-        'sync-rejected-status': syncPostStatus,
+        'sync-rejected-status': async (params, ctx) => {
+          await syncPostStatus(params, ctx)
+          if (onRejected) await onRejected(params, ctx)
+        },
         'sync-published-status': syncPostStatus,
         ...handlers,
       },
