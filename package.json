@@ -1,0 +1,17 @@
+{
+  "name": "fact-card-workflow-repo",
+  "private": true,
+  "scripts": {
+    "studio:dev": "npm --prefix studio run dev",
+    "web:dev": "npm --prefix web run dev",
+    "runtime:plan": "studio/node_modules/.bin/sanity blueprints plan",
+    "runtime:deploy": "studio/node_modules/.bin/sanity blueprints deploy",
+    "runtime:info": "studio/node_modules/.bin/sanity blueprints info"
+  },
+  "dependencies": {
+    "@sanity/blueprints": "0.28.0",
+    "@sanity/client": "^8.9.0",
+    "@sanity/functions": "1.8.1",
+    "@sanity/workflow-engine": "0.36.0"
+  }
+}

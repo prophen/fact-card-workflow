@@ -34,7 +34,6 @@ assets API, and writes its asset reference to `image`. It then calls:
 
 ```ts
 await engine.fireAction({instanceId, activity: 'generate', action: 'submit'})
-await engine.drainEffects({instanceId})
 ```
 
 Submission requires the completed fields. Use a contributor token for the agent. Exa and CBS
@@ -51,10 +50,12 @@ or publication has been confirmed. It does not publish to Facebook or publish
 the Sanity draft. `published` has no activities or outgoing transitions.
 
 The engine stage is authoritative. `status` is a read-only mirror updated by the
-`sync-*-status` effects. Run `npm run workflows:drain` with the server-only
-`SANITY_AUTH_TOKEN` set after
-actions (including Studio review actions), or use Sanity Functions for continuous
-draining. Without a drainer, stages still advance but the document status lags.
+`sync-*-status` effects. The deployed `fact-card-status-sync` Sanity Function drains
+new effects automatically after workflow actions, including Studio review actions.
+There is no need to run the manual drainer after normal transitions. Keep
+`npm run workflows:drain` with the server-only `SANITY_AUTH_TOKEN` for backlog or
+interrupted-job recovery. Runtime configuration and deployment commands live at
+the repository root; see `../README.md`.
 The helper reads the current stage so queued old updates do not intentionally
 restore an earlier status; concurrent raw content edits still require normal
 production coordination.

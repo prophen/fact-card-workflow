@@ -1,4 +1,4 @@
-import {createClient} from '@sanity/client'
+import {createClient, type SanityClient} from '@sanity/client'
 import {
   createEngine,
   ENGINE_API_VERSION,
@@ -15,6 +15,10 @@ export function createPostEngine(token: string) {
     token,
     useCdn: false,
   })
+  return createPostEngineFromClient(client)
+}
+
+export function createPostEngineFromClient(client: SanityClient) {
   const syncPostStatus: EffectHandler = async (params, ctx) => {
     if (typeof params.subject !== 'string') throw new Error('Expected a subject GDR URI')
     // Read the current stage rather than a queued literal: delayed effects cannot restore an old status.
@@ -40,6 +44,7 @@ export function createPostEngine(token: string) {
     client,
     workflowResource: {type: 'dataset', id: 'ta2gi825.production'},
     tag: 'production',
+    executionContext: {kind: 'drainer', id: 'fact-card-status-sync'},
     effects: {
       handlers: {
         'sync-review-status': syncPostStatus,
