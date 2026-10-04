@@ -21,16 +21,16 @@ generating → inReview → approved → published
         (reject with feedback)
 ```
 
-I can approve a card or reject it with a note. A rejection queues a replacement using that feedback, returns the revised card to review, and requires approval again. The generator cannot approve its own work.
+I can approve a card or reject it with a note. A rejection updates the existing post using that feedback and sends it back to review. I can then approve it or request another revision. The generator cannot approve its own work.
 
-The Next.js post library shows the card image, caption, citation, source link, and workflow status. It includes drafts, supports search and status filters, and lets me copy a caption or download the original PNG.
+The Next.js post library shows the card image, caption, citation, source link, and workflow status. Source notes render as formatted Markdown, with longer notes available in an expandable section beside the image. It includes drafts, supports search and status filters, and lets me copy a caption or download the original PNG.
 
 ## Demo
 
 <!-- REQUIRED_BEFORE_PUBLISH: Add the walkthrough URL and upload the screenshots to DEV. -->
 
 - **Post library:** [fact-card-workflow.nikema.dev](https://fact-card-workflow.nikema.dev/)
-- **Workflow walkthrough:** [DEMO_VIDEO_URL]
+- **Workflow walkthrough:** https://youtu.be/Sa18wrSdgQQ
 
 <!-- Upload assets/post-library.jpg and assets/post-detail.jpg to DEV and insert the returned image URLs here. Local paths will not work in a published DEV post. -->
 
@@ -72,13 +72,17 @@ Next I asked, “I want to generate the posts within the app.” We added a cust
 
 When choosing topics became difficult, I asked to bring in the topic-generation feature from CBS Post Generator. Studio now suggests five specific claim ideas from broad categories. I can choose one and send that exact idea to source checking. The suggestions are explicitly unverified. I restored the original generator’s idea prompt so suggestions retain its range of historical stories. A source-checking retry now keeps the same claim while requesting more sources and longer source text; it does not turn an unsupported claim into a post.
 
-OpenAI produces a candidate claim when I enter my own topic. Exa provides source excerpts. A second model pass checks the claim against those excerpts, using the original generator’s supported, unsupported, and contradicted findings. I can inspect the linked Exa sources and apply a suggested correction based on those findings, preserving supported wording without a new search or audit. The selected fact becomes a card, citation, source URL, and caption ending in a question, then goes to human review.
+OpenAI produces a candidate claim when I enter my own topic. **Verify with Exa** retrieves source excerpts and runs the original generator’s audit prompt. The tool shows each finding as **supported**, **unsupported**, or **contradicted**, alongside the linked Exa sources and excerpt previews. I can expand the excerpts to read their formatted text.
+
+If part of a claim isn’t supported or conflicts with the sources, the app suggests a correction while keeping the supported details. **Apply suggested correction** uses the findings already available, without another search or audit. If I edit that suggestion, the edited wording needs verification. Possible contradictions with earlier approved or published posts appear as review warnings.
+
+Once I’m satisfied with the selected fact, **Create card & submit for review** renders the image and saves a draft with its citation, source URL, and caption ending in a question. Verification and card creation are separate steps, giving me time to inspect the evidence first.
 
 That screening step can still miss historical nuance. The human review gate is part of the design, not an optional cleanup step.
 
 ### Refine the actual card, not just the prompt
 
-I noticed that the card template printed the source text at the bottom and asked to remove it. We kept the citation in Sanity and on the detail page, while simplifying the image to the fact and the California Black Stories branding.
+I noticed that the card template printed the source text at the bottom and asked to remove it. We kept the citation in Sanity and on the detail page, while simplifying the image to the fact and the California Black Stories branding. New citations contain source titles and URLs rather than entire Exa excerpts; the fuller excerpts remain available during fact-checking. Studio also provides a formatted citation preview.
 
 The images are template-rendered, not AI-generated artwork. Satori lays out the text, and WebAssembly Resvg produces a 1080 × 1080 PNG. A native renderer caused deployment trouble, so we moved to the WebAssembly version and shared that renderer between initial generation and replacements.
 
@@ -86,7 +90,11 @@ The images are template-rendered, not AI-generated artwork. Satori lays out the 
 
 A reject button alone leaves me with another task. I asked how to generate a replacement automatically, and we connected rejection feedback to the generation process.
 
-The background job uses the topic, previous fact, and revision note. Failed generation leaves an error and a retry action. Revision checks help prevent a long-running replacement from overwriting edits made while it was running. Existing workflow instances retain their definition snapshots and review history.
+The background job uses the revision note to decide what needs changing. Caption-only feedback preserves the fact, source, and image. Image-only feedback rerenders the existing fact. Factual or source changes go through verification. I also fixed feedback such as “keep the fact and source unchanged” so it does not accidentally trigger a factual rewrite.
+
+Replacement saves tolerate background status updates while still protecting edits a reviewer makes during generation. An actual generation failure leaves an error and a retry action. Existing workflow instances retain their definition snapshots and review history.
+
+The current Workflows UI can briefly show “An automated step didn’t finish” while the background job is still running. In the demonstrated flow, that warning clears when the revised post returns to review. I acknowledge the temporary warning in the walkthrough rather than presenting it as a failed regeneration.
 
 ### Finish the handoff
 
@@ -94,7 +102,7 @@ The frontend came from another practical request: “can we build a frontend tha
 
 Finally, I wanted Studio's **Publish** button to complete the workflow automatically. The button checks the current workflow's approval, and a background Function advances the approved workflow after a published document exists.
 
-The latest local checks passed 45 tests, Studio and web builds, and the changed-file lint checks. Tests exercise approval restrictions, rejection and retries, rendering, and publication synchronization. I also checked search, filtering, caption copying, mobile layouts, and an actual 1080 × 1080 image download in the browser. The deployed library also loaded successfully, and search, status filtering, caption copying, and image download worked there. The full authenticated workflow still needs its recorded walkthrough and final hosted smoke test.
+The latest local checks passed 52 tests, Studio and web builds, and TypeScript checks. Tests exercise approval restrictions, rejection and retries, caption-only revisions, concurrent status updates, formatted source rendering, card rendering, and publication synchronization. A production-build endpoint check also confirms that accepting a suggested correction reuses its saved evidence without another provider call. I also checked search, filtering, caption copying, mobile layouts, and an actual 1080 × 1080 image download in the browser. The deployed library also loaded successfully, and search, status filtering, caption copying, and image download worked there. The full authenticated workflow still needs its recorded walkthrough and final hosted smoke test.
 
 ### What I would improve next
 
