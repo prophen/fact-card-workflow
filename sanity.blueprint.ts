@@ -19,7 +19,7 @@ export default defineBlueprint({
         filter:
           '(_type == "sanity.workflow.instance" && tag == "production" && definition == "post-workflow" && ' +
           'count(after().pendingEffects[!defined(claim) && !(_key in coalesce(before().pendingEffects[]._key, []))]) > 0) || ' +
-          '(_type == "post" && !(_id in path("drafts.**")) && !(_id in path("versions.**")) && status == "approved")',
+          '(_type == "post" && !(_id in path("drafts.**")) && !(_id in path("versions.**")))',
         projection: '{_id, _type}',
       },
     }),

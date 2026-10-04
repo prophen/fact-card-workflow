@@ -32,7 +32,10 @@ export async function getPublishApproval(client: SanityClient, id: string) {
 export async function markPostPublished(client: SanityClient, id: string) {
   const baseId = id.replace(/^drafts\./, '')
   const post = await client.getDocument<{_type: string; status?: string}>(baseId)
-  if (!post || post._type !== 'post' || post.status !== 'approved') return
+  if (!post || post._type !== 'post') return
+  // A previous published copy does not mean the current reviewed draft was published.
+  if (await client.getDocument(`drafts.${baseId}`)) return
+  // Workflow approval is authoritative; its mirrored status may still be syncing.
   const instance = await getPublishApproval(client, baseId)
   if (!instance) return
   const engine = createPostEngineFromClient(client)

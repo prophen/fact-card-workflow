@@ -73,10 +73,11 @@ export const postType = defineType({
     }),
     defineField({
       name: 'status',
-      title: 'Status',
+      title: 'Workflow status',
       type: 'string',
+      readOnly: true,
       initialValue: 'generating',
-      description: 'Mirrors the workflow stage through the status-sync runtime.',
+      description: 'Updated automatically by the workflow. To approve or reject this post, open the Workflows tab and use its review actions.',
       options: {
         list: [
           {title: 'Generating', value: 'generating'},

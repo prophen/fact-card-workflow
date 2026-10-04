@@ -49,8 +49,8 @@ async function setup() {
     })
     await client.patch(post._id).set({status: 'approved'}).commit()
   }
-  const publish = async () => {
-    await client.create({...post, _id: 'publication-card', status: 'approved'})
+  const publish = async (status = 'approved') => {
+    await client.create({...post, _id: 'publication-card', status})
     await client.delete(post._id)
   }
   return {bench, client, instance, approve, publish}
@@ -82,4 +82,20 @@ test('a published document with a forged approved status cannot bypass workflow 
   await publish()
   await markPostPublished(client, 'publication-card')
   expect(await bench.currentStage(instance._id)).toBe('generating')
+})
+
+test('publication works when the mirrored status has not caught up with approval', async () => {
+  const {bench, client, instance, approve, publish} = await setup()
+  await approve()
+  await publish('inReview')
+  await markPostPublished(client, 'publication-card')
+  expect(await bench.currentStage(instance._id)).toBe('published')
+  expect((await client.getDocument('publication-card'))?.status).toBe('published')
+})
+test('an older published copy cannot complete approval of an unpublished draft', async () => {
+  const {bench, client, instance, approve} = await setup()
+  await approve()
+  await client.create({_id: 'publication-card', _type: 'post', status: 'published'})
+  await markPostPublished(client, 'publication-card')
+  expect(await bench.currentStage(instance._id)).toBe('approved')
 })
