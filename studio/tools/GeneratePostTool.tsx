@@ -1,5 +1,5 @@
 import {useRef, useState} from 'react'
-import type {Finding} from '../../shared/generate-post'
+import type {Finding, Evidence} from '../../shared/generate-post'
 import {GeneratorPage} from './GeneratePostStyles'
 import {useClient} from 'sanity'
 import {IntentLink} from 'sanity/router'
@@ -11,7 +11,13 @@ type GeneratedPost = {
   factText: string
   caption: string
   source: {citation: string; url: string}
-  verification?: {originalClaim: string; findings: Finding[]}
+  verification?: {
+    originalClaim: string
+    findings: Finding[]
+    sources: Evidence[]
+    conflicts?: {fact: string; reason: string}[]
+    corrected?: boolean
+  }
   cardPng: string
 }
 const template = 'defaultFactCard'
@@ -31,6 +37,9 @@ export function GeneratePostTool() {
   const [result, setResult] = useState<GeneratedPost | null>(null)
   const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
+  const [conflicts, setConflicts] = useState<{fact: string; reason: string}[]>([])
+  const [sources, setSources] = useState<Evidence[]>([])
+  const [readyClaim, setReadyClaim] = useState<string | null>(null)
   const [findings, setFindings] = useState<Finding[]>([])
   const [preparedClaim, setPreparedClaim] = useState<string | null>(null)
   const [sourceContext, setSourceContext] = useState<string | undefined>()
@@ -146,7 +155,8 @@ export function GeneratePostTool() {
     const candidateClaim =
       correctedClaim || (retrySources ? retryClaim || undefined : selectedClaim)
     setRetryClaim(null)
-    setFindings([])
+    setReadyClaim(null)
+    if (!acceptRewrite) setFindings([])
     setCorrection(null)
     setBusy(true)
     setError('')
@@ -157,7 +167,7 @@ export function GeneratePostTool() {
     assetId.current = null
     setProgress(
       acceptRewrite
-        ? 'Creating a card from the checked rewrite…'
+        ? 'Creating a card from the selected fact…'
         : retrySources
           ? 'Adding more sources while keeping the earlier evidence…'
           : 'Finding sources, auditing each part of the claim, and preparing the caption…',
@@ -170,6 +180,7 @@ export function GeneratePostTool() {
         method: 'POST',
         headers: {'Content-Type': 'application/json', Authorization: `Bearer ${token}`},
         body: JSON.stringify({
+          mode: acceptRewrite ? 'post' : 'verify',
           topic,
           candidateClaim,
           retrySources,
@@ -182,6 +193,7 @@ export function GeneratePostTool() {
       if (!response.ok) {
         if (response.status === 400) setSourceContext(undefined)
         if (data.code === 'SOURCE_VERIFICATION_FAILED' && typeof data.candidateClaim === 'string') {
+          setSources(Array.isArray(data.sources) ? data.sources : [])
           setPreparedClaim(data.rewriteReady ? data.suggestedCorrection : null)
           setRetryClaim(data.candidateClaim)
           setSourceContext(typeof data.sourceContext === 'string' ? data.sourceContext : undefined)
@@ -192,6 +204,16 @@ export function GeneratePostTool() {
         }
         throw new Error(data.error || 'Generation failed.')
       }
+      if (!acceptRewrite) {
+        setConflicts(data.verification?.conflicts || [])
+        setSources(data.verification?.sources || [])
+        setFindings(data.verification?.findings || [])
+        setSourceContext(data.sourceContext)
+        setReadyClaim(data.factText)
+        setProgress('The sources back the claim. Create the card when you are ready.')
+        setBusy(false)
+        return
+      }
       if (
         typeof data.cardPng !== 'string' ||
         typeof data.factText !== 'string' ||
@@ -200,6 +222,8 @@ export function GeneratePostTool() {
         typeof data.source?.url !== 'string'
       )
         throw new Error('The generator returned incomplete content.')
+      setSources(data.verification?.sources || [])
+      setFindings(data.verification?.findings || [])
       setResult(data)
       await save(data)
     } catch (cause) {
@@ -269,6 +293,9 @@ export function GeneratePostTool() {
                     type="button"
                     disabled={busy || ideasBusy || Boolean(result && !submitted)}
                     onClick={() => {
+                      setSources([])
+                      setReadyClaim(null)
+                      setConflicts([])
                       setRetryClaim(null)
                       setFindings([])
                       setSourceContext(undefined)
@@ -276,9 +303,7 @@ export function GeneratePostTool() {
                       setTopic(claim)
                       setSelectedClaim(claim)
                       setError('')
-                      setProgress(
-                        'Idea selected. Generate the post to check its source and render the card.',
-                      )
+                      setProgress('Idea selected. Verify with Exa to see its audit and sources.')
                     }}
                     aria-pressed={selectedClaim === claim}
                   >
@@ -293,8 +318,8 @@ export function GeneratePostTool() {
           <span className="eyebrow">Step 02 · Create</span>
           <h2 id="generate-heading">Verify & generate</h2>
           <p>
-            Use an idea from the list, or enter a topic of your own. Only a supported fact moves to
-            review.
+            Use an idea from the list, or enter a topic of your own. Review the findings and
+            sources, then apply a correction if needed.
           </p>
           <form
             onSubmit={(event) => {
@@ -311,6 +336,9 @@ export function GeneratePostTool() {
               maxLength={selectedClaim !== undefined ? 400 : 500}
               value={topic}
               onChange={(event) => {
+                setSources([])
+                setConflicts([])
+                setReadyClaim(null)
                 setRetryClaim(null)
                 setFindings([])
                 setSourceContext(undefined)
@@ -327,7 +355,7 @@ export function GeneratePostTool() {
               type="submit"
               disabled={busy || ideasBusy || !topic.trim() || Boolean(result && !submitted)}
             >
-              Generate post
+              Verify with Exa
             </button>
           </form>
         </section>
@@ -338,26 +366,13 @@ export function GeneratePostTool() {
       {error && (
         <div className="error-panel" role="alert">
           <p>{error}</p>
-          {findings.length > 0 && (
-            <ul className="audit-list">
-              {findings.map((finding) => (
-                <li key={`${finding.part}-${finding.status}-${finding.quote || finding.detail}`}>
-                  <strong>
-                    {finding.status}: {finding.part}
-                  </strong>
-                  <p>{finding.detail}</p>
-                  {finding.quote && <blockquote>{finding.quote}</blockquote>}
-                </li>
-              ))}
-            </ul>
-          )}
           {correction !== null && !result && (
             <div className="correction-panel">
-              <label htmlFor="corrected-claim">Suggested correction · edit before checking</label>
+              <label htmlFor="corrected-claim">Suggested correction</label>
               <textarea
                 id="corrected-claim"
                 rows={3}
-                maxLength={280}
+                maxLength={400}
                 value={correction}
                 onChange={(event) => setCorrection(event.target.value)}
                 disabled={busy || ideasBusy}
@@ -369,17 +384,24 @@ export function GeneratePostTool() {
                   if (!revised) return
                   setTopic(revised)
                   setSelectedClaim(revised)
-                  void generate(false, revised, preparedClaim === revised)
+                  if (preparedClaim === revised) {
+                    setReadyClaim(revised)
+                    setCorrection(null)
+                    setError('')
+                    setProgress(
+                      'Correction applied using the existing findings. Ready to create the card.',
+                    )
+                  } else void generate(false, revised)
                 }}
               >
                 {preparedClaim === correction?.trim()
-                  ? 'Accept rewrite & create card'
-                  : 'Check rewrite & create card'}
+                  ? 'Apply suggested correction'
+                  : 'Verify edited correction'}
               </button>
               <p>
                 {preparedClaim === correction?.trim()
-                  ? 'This exact rewrite has already been checked against the saved sources. Accepting it creates the card for your review.'
-                  : 'This wording needs checking against the saved sources before a card is created.'}
+                  ? 'This correction uses the existing findings and preserves supported parts. Applying it does not run another search or audit.'
+                  : 'An edited correction will be checked against the saved sources.'}
               </p>
             </div>
           )}
@@ -404,6 +426,68 @@ export function GeneratePostTool() {
           )}
         </div>
       )}
+      {conflicts.length > 0 && (
+        <section className="step-panel">
+          <h2>Possible conflicts with earlier posts</h2>
+          <ul>
+            {conflicts.map((conflict, index) => (
+              <li key={index}>
+                <strong>{conflict.fact}</strong>
+                <p>{conflict.reason}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {findings.length > 0 && (
+        <section className="step-panel" aria-label="Claim audit">
+          <h2>Claim audit</h2>
+          <p>
+            {findings.some((f) => f.status === 'contradicted')
+              ? 'Sources contradict part of the original claim.'
+              : findings.some((f) => f.status === 'unsupported')
+                ? 'Some parts of the original claim lack source support.'
+                : 'The sources back the claim.'}
+          </p>
+          <ul className="audit-list">
+            {findings.map((finding, index) => (
+              <li key={index}>
+                <span className={`claim-status ${finding.status}`}>{finding.status}</span>
+                <strong>{finding.part}</strong>
+                <p>{finding.detail}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {sources.length > 0 && (
+        <section className="step-panel" aria-label="Exa sources">
+          <h2>Exa sources</h2>
+          <ul className="sources-list">
+            {sources.map((source) => (
+              <li key={source.url}>
+                <a href={source.url} target="_blank" rel="noreferrer">
+                  {source.title}
+                </a>
+                {source.publishedDate && <small> · {source.publishedDate.slice(0, 10)}</small>}
+                <p>{source.highlights[0]?.slice(0, 280)}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {readyClaim && !result && (
+        <section className="step-panel">
+          <h2>Fact for the card</h2>
+          <p>{readyClaim}</p>
+          <button
+            disabled={busy || ideasBusy}
+            onClick={() => void generate(false, readyClaim, true)}
+          >
+            Create card & submit for review
+          </button>
+        </section>
+      )}
       {draftId.current && (
         <p>
           <IntentLink
@@ -426,7 +510,7 @@ export function GeneratePostTool() {
             <p>Template-rendered PNG · 1080 × 1080</p>
           </div>
           <div className="result-copy">
-            <span className="eyebrow">Verified · Ready for your review</span>
+            <span className="eyebrow">Ready for your review</span>
             {result.verification && (
               <details>
                 <summary>View claim audit</summary>

@@ -70,9 +70,9 @@ I initially had a manual drain command. I asked, “can we handle it automatical
 
 Next I asked, “I want to generate the posts within the app.” We added a custom **Generate post** tool in Studio, backed by a server endpoint in the web app.
 
-When choosing topics became difficult, I asked to bring in the topic-generation feature from CBS Post Generator. Studio now suggests five specific claim ideas from broad categories. I can choose one and send that exact idea to source checking. The suggestions are explicitly unverified. After an overly broad suggestion failed checking, I tightened them to one concrete event or action. A source-checking retry now keeps the same claim while requesting more sources and longer source text; it does not turn an unsupported claim into a post.
+When choosing topics became difficult, I asked to bring in the topic-generation feature from CBS Post Generator. Studio now suggests five specific claim ideas from broad categories. I can choose one and send that exact idea to source checking. The suggestions are explicitly unverified. I restored the original generator’s idea prompt so suggestions retain its range of historical stories. A source-checking retry now keeps the same claim while requesting more sources and longer source text; it does not turn an unsupported claim into a post.
 
-OpenAI produces a candidate claim when I enter my own topic. Exa provides source excerpts. A second model pass checks the claim against those excerpts, and the code rejects a source quote that does not match the retrieved evidence. Supported output becomes a fact, citation, source URL, and caption ending in a question.
+OpenAI produces a candidate claim when I enter my own topic. Exa provides source excerpts. A second model pass checks the claim against those excerpts, using the original generator’s supported, unsupported, and contradicted findings. I can inspect the linked Exa sources and apply a suggested correction based on those findings, preserving supported wording without a new search or audit. The selected fact becomes a card, citation, source URL, and caption ending in a question, then goes to human review.
 
 That screening step can still miss historical nuance. The human review gate is part of the design, not an optional cleanup step.
 

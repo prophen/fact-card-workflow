@@ -269,4 +269,34 @@ export const GeneratorPage = styled.div`
       padding: 22px;
     }
   }
+  .claim-status {
+    display: inline-block;
+    margin-right: 12px;
+    padding: 4px 8px;
+    border-radius: 5px;
+    text-transform: capitalize;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .claim-status.supported {
+    background: #dcfce7;
+    color: #166534;
+  }
+  .claim-status.unsupported {
+    background: #fef3c7;
+    color: #92400e;
+  }
+  .claim-status.contradicted {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+  .sources-list {
+    padding-left: 20px;
+  }
+  .sources-list li {
+    margin-bottom: 20px;
+  }
+  .sources-list a {
+    overflow-wrap: anywhere;
+  }
 `

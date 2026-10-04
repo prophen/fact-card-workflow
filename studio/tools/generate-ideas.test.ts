@@ -37,10 +37,10 @@ test('scopes categories to California and returns a bounded, deduplicated list',
   const body = JSON.parse(
     (request.mock.calls[0] as unknown as [string, RequestInit])[1].body as string,
   )
-  expect(JSON.parse(body.messages[1].content).coreTopics).toEqual([
-    'Black newspapers in California',
-    'California music',
-  ])
+  expect(body.temperature).toBe(0.8)
+  expect(body.messages[1].content).toBe(
+    'Core topics: Black newspapers in California, California music\nGenerate 5 candidate factual claims, one per topic if possible, rotating across the topics.',
+  )
 })
 test('does not call the provider for empty categories', async () => {
   const request = vi.fn()

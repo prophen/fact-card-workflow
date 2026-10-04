@@ -111,7 +111,6 @@ test('mixed claims return findings and a correction without making a card', asyn
       ],
     }),
     completion({fact: claim}),
-    completion(supported),
     completion(caption),
   )
   await expect(
@@ -123,37 +122,46 @@ test('mixed claims return findings and a correction without making a card', asyn
     preparedRewrite: expect.objectContaining({factText: claim}),
     findings: expect.arrayContaining([expect.objectContaining({status: 'unsupported'})]),
   })
-  expect(request).toHaveBeenCalledTimes(5)
+  expect(request).toHaveBeenCalledTimes(4)
 })
 
-test('a corrected claim must pass a fresh source search and audit', async () => {
+test('unsupported findings remain visible even when no correction can be produced', async () => {
   const request = requestFor(
     sources,
     completion({
       findings: [{part: claim, status: 'unsupported', detail: 'Insufficient evidence.'}],
     }),
+    completion({fact: ''}),
   )
-  await expect(generatePost('schools', settings, request, undefined, claim)).rejects.toBeInstanceOf(
-    SourceVerificationError,
-  )
-  expect(request).toHaveBeenCalledTimes(2)
+  await expect(generatePost('schools', settings, request, undefined, claim)).rejects.toMatchObject({
+    code: 'SOURCE_VERIFICATION_FAILED',
+    findings: [expect.objectContaining({status: 'unsupported'})],
+  })
 })
 
-test('fabricated quotes cannot pass the audit', async () => {
-  for (const change of [{quote: 'Invented evidence'}]) {
-    const request = requestFor(
-      sources,
-      completion({findings: [{...supported.findings[0], ...change}]}),
-    )
-    await expect(
-      generatePost('schools', settings, request, undefined, claim),
-    ).rejects.toMatchObject({findings: [expect.objectContaining({status: 'unsupported'})]})
+test('uses the original audit format with quotes in detail, without a separate quote or index requirement', async () => {
+  const finding = {
+    part: 'School opening date',
+    status: 'supported',
+    detail: `The archive says "${claim}"`,
   }
+  const request = requestFor(
+    sources,
+    completion({verdict: 'supported', findings: [finding]}),
+    completion(caption),
+  )
+  const post = await generatePost('schools', settings, request, undefined, claim)
+  expect(post.verification?.findings[0]).toMatchObject(finding)
+  const body = JSON.parse(request.mock.calls[1][1]!.body as string)
+  expect(body.temperature).toBe(0.2)
+  expect(body.messages[1].content).toBe(
+    `Claim: ${claim}\n\nSource excerpts:\nSource: Archive (https://example.org/archive)\nExcerpt: ${claim}`,
+  )
 })
 
 test('empty or malformed audits fail closed', async () => {
   for (const audit of [{findings: []}, {}, {findings: [null]}]) {
-    const request = requestFor(sources, completion(audit))
+    const request = requestFor(sources, completion(audit), completion({fact: ''}))
     await expect(
       generatePost('schools', settings, request, undefined, claim),
     ).rejects.toBeInstanceOf(SourceVerificationError)
@@ -182,20 +190,19 @@ test('longer source retries still use exact quotes', async () => {
   })
 })
 
-test('history contradictions block generation before caption creation', async () => {
+test('history contradictions appear as review warnings as in the original app', async () => {
+  const conflicts = [{fact: 'The school opened in 1901.', reason: 'Different opening dates.'}]
   const request = requestFor(
     sources,
     completion(supported),
-    completion({
-      conflicts: [{fact: 'The school opened in 1901.', reason: 'Different opening dates.'}],
-    }),
+    completion({conflicts}),
+    completion(caption),
   )
-  await expect(
-    generatePost('schools', settings, request, undefined, claim, false, [
-      'The school opened in 1901.',
-    ]),
-  ).rejects.toThrow('conflicts with a previously approved post')
-  expect(request).toHaveBeenCalledTimes(3)
+  const post = await generatePost('schools', settings, request, undefined, claim, false, [
+    'The school opened in 1901.',
+  ])
+  expect(post.verification?.conflicts).toEqual(conflicts)
+  expect(post.factText).toBe(claim)
 })
 
 test('history wording differences can pass and produce a caption', async () => {
@@ -210,19 +217,19 @@ test('history wording differences can pass and produce a caption', async () => {
   ).toBe(claim)
 })
 
-test('revision feedback reaches drafting, audit and caption generation', async () => {
+test('editorial feedback reaches drafting and caption without changing the original audit prompt', async () => {
   const revision = {note: 'Use a shorter caption', previousFact: claim}
   const request = requestFor(
-    completion({claim}),
+    completion({claims: [claim]}),
     sources,
     completion(supported),
     completion(caption),
   )
   await generatePost('schools', settings, request, revision)
-  for (const index of [0, 2, 3]) {
-    const body = JSON.parse(request.mock.calls[index][1]!.body as string)
-    expect(JSON.parse(body.messages[1].content).revision).toEqual(revision)
-  }
+  const draft = JSON.parse(request.mock.calls[0][1]!.body as string)
+  expect(draft.messages[1].content).toContain(revision.note)
+  const captionBody = JSON.parse(request.mock.calls[3][1]!.body as string)
+  expect(JSON.parse(captionBody.messages[1].content).revision).toEqual(revision)
 })
 
 test('missing sources and provider errors do not substitute placeholder content', async () => {
@@ -253,31 +260,28 @@ test('caption formatting failures use the verified fact and an engagement questi
   }
 })
 
-test('oversized card facts still require shortening and a fresh audit', async () => {
-  await expect(
-    generatePost(
-      'schools',
-      settings,
-      requestFor(sources, completion(supported)),
-      undefined,
-      claim.repeat(5),
-    ),
-  ).rejects.toThrow('Shorten this verified claim')
+test('keeps relevant supported wording longer than the old 280-character limit', async () => {
+  const longerClaim = claim.repeat(5)
+  const post = await generatePost(
+    'schools',
+    settings,
+    requestFor(sources, completion(supported), completion(caption)),
+    undefined,
+    longerClaim,
+  )
+  expect(post.factText).toBe(longerClaim)
 })
 
-test('audit details not asserted in the candidate are excluded from correction findings', async () => {
-  const request = requestFor(
-    sources,
-    completion({
-      findings: [
-        ...supported.findings,
-        {part: 'An unrelated achievement', status: 'unsupported', detail: 'Not in this claim.'},
-      ],
-    }),
-    completion(caption),
+test('retains paraphrased checkable parts from the original audit rather than filtering by substring', async () => {
+  const findings = [{part: 'Founding of the school', status: 'supported', detail: claim}]
+  const post = await generatePost(
+    'schools',
+    settings,
+    requestFor(sources, completion({findings}), completion(caption)),
+    undefined,
+    claim,
   )
-  const post = await generatePost('schools', settings, request, undefined, claim)
-  expect(post.verification?.findings).toHaveLength(1)
+  expect(post.verification?.findings[0]).toMatchObject(findings[0])
 })
 
 test('accepts a complete caption with an embedded question and no separate cta', async () => {
@@ -386,47 +390,56 @@ test('failed audits carry the exact source excerpts used to suggest the revision
   })
 })
 
-test('a real quote is attributed to its retrieved source despite a wrong model source index', async () => {
-  for (const sourceIndex of [1, 20, undefined]) {
-    const request = requestFor(
-      {
-        results: [
-          ...sources.results,
-          {
-            title: 'Other archive',
-            url: 'https://example.org/other',
-            highlights: ['Unrelated context.'],
-          },
-        ],
-      },
-      completion({findings: [{...supported.findings[0], sourceIndex}]}),
+test('retains the linked source list and publication dates', async () => {
+  const publishedDate = '2020-01-01'
+  const post = await generatePost(
+    'schools',
+    settings,
+    requestFor(
+      {results: [{...sources.results[0], publishedDate}]},
+      completion(supported),
       completion(caption),
-    )
-    const post = await generatePost('schools', settings, request, undefined, claim)
-    expect(post.verification?.findings[0].sourceIndex).toBe(0)
-    expect(post.source.url).toBe('https://example.org/archive')
-  }
+    ),
+    undefined,
+    claim,
+  )
+  expect(post.verification?.sources[0]).toEqual({...sources.results[0], publishedDate})
 })
 
-test('an unchecked correction is not offered for instant acceptance and cannot recurse', async () => {
+test('suggested correction uses original findings without a new search or audit and preserves the original audit', async () => {
   const candidate = claim + ' It was the first in the state.'
+  const findings = [
+    ...supported.findings,
+    {
+      part: 'First in the state',
+      status: 'contradicted',
+      detail: 'An earlier school opened in 1880.',
+    },
+  ]
   const request = requestFor(
     sources,
-    completion({
-      findings: [
-        ...supported.findings,
-        {part: 'It was the first in the state.', status: 'unsupported', detail: 'No evidence.'},
-      ],
-    }),
+    completion({verdict: 'contradicted', findings}),
     completion({fact: claim}),
-    completion({findings: [{...supported.findings[0], status: 'unsupported'}]}),
+    completion(caption),
   )
   try {
     await generatePost('schools', settings, request, undefined, candidate)
-    throw new Error('Expected failure')
+    throw new Error('Expected correction')
   } catch (error) {
     expect(error).toBeInstanceOf(SourceVerificationError)
-    expect((error as SourceVerificationError).preparedRewrite).toBeUndefined()
+    const correction = (error as SourceVerificationError).preparedRewrite!
+    expect(correction.factText).toBe(claim)
+    expect(correction.verification?.originalClaim).toBe(candidate)
+    expect(correction.verification?.corrected).toBe(true)
+    expect(correction.verification?.findings).toEqual(findings)
   }
   expect(request).toHaveBeenCalledTimes(4)
+  const fix = JSON.parse(request.mock.calls[2][1]!.body as string)
+  expect(fix.temperature).toBe(0.3)
+  expect(fix.messages[0].content).toContain(
+    'Keep supported parts as close to the original wording as possible.',
+  )
+  expect(fix.messages[1].content).toBe(
+    `Claim: ${candidate}\n\nFindings:\n${JSON.stringify(findings, null, 2)}`,
+  )
 })

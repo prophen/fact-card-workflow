@@ -13,9 +13,9 @@ global.fetch=async(input,options={})=>{
  if(url.includes('api.openai.com')) {
   providerRequests++;
   const isAudit=body.messages[0].content.includes('skeptical fact-checker');
-  const input=JSON.parse(body.messages[1].content);
+  const input=body.messages[1].content;
   const isFix=body.messages[0].content.includes('You are an editor');
-  const result=isFix?{fact}:isAudit?{findings:[{part:fact,status:'supported',detail:'Test evidence.',sourceIndex:0,quote:fact}, ...(input.candidate.includes('It was the first') ? [{part:'It was the first in California.',status:'unsupported',detail:'No evidence supports first.'}] : [])]}:{caption:fact,cta:'What would you like to learn?'};
+  const result=isFix?{fact}:isAudit?{findings:[{part:fact,status:'supported',detail:'Test evidence.',sourceIndex:0,quote:fact}, ...(input.includes('It was the first') ? [{part:'It was the first in California.',status:'unsupported',detail:'No evidence supports first.'}] : [])]}:{caption:fact,cta:'What would you like to learn?'};
   return Response.json({choices:[{message:{content:JSON.stringify(result)}}]});
  }
  throw Error('Unexpected test request: '+url);
@@ -34,7 +34,7 @@ global.fetch=async(input,options={})=>{
  const changed=await post({topic:fact,candidateClaim:'Edited text.',sourceContext:revision.sourceContext,acceptRewrite:true});
  assert.equal(changed.status,400,'Edited rewrites cannot use the instant-accept path.');
  const response=await post({topic:fact,candidateClaim:revision.suggestedCorrection,sourceContext:revision.sourceContext,acceptRewrite:true});
- assert.equal(providerRequests,checkedCalls,'Accepting the checked rewrite must not run another audit or caption generation.');
+ assert.equal(providerRequests,checkedCalls,'Accepting the suggested correction must not run another audit or caption generation.');
  const data=await response.json();assert.equal(response.status,200,data.error);
  assert.equal(searches,1,'Applying the correction must reuse the original evidence without another search.');
  const tampered=await post({topic:fact,candidateClaim:fact,sourceContext:revision.sourceContext+'changed'});

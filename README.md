@@ -46,28 +46,27 @@ See [workflow setup and demo scope](studio/workflows/README.md).
 
 Open Studio’s **Generate post** tab. Start with the prefilled core categories
 and click **Suggest five ideas**, then **Use this idea** to select a specific
-claim. Click **Generate post** to verify that exact idea and create the card.
-You can also type your own topic and generate directly. Suggestions are
-unverified candidates, not approved historical facts. Suggestions focus on one
-concrete event or action rather than a broad biography or impact claim. If evidence
-is insufficient, **Retry source checking** keeps the same candidate and searches
-more sources with longer page text while retaining the original excerpts. The tool audits each checkable part across the retrieved sources, following the
-original CBS Post Generator's audit and correction flow. When a claim is mixed or
-contradicted, it shows the findings and offers an editable suggested correction
-where evidence allows. **Accept rewrite & create card** uses a rewrite already checked against the saved
-evidence, with no new search or audit on acceptance. Edited or unchecked suggestions
-use **Check rewrite & create card** before submission. Saved source excerpts are signed by the server,
-bound to your Studio user, and available for 30 minutes; editing the main claim
-starts a new source check. Successful claims are
-cross-checked against up to 100 recent approved/published Sanity posts (including
-approved drafts). A conflict blocks card generation. A separate caption step
-adds a short engagement question. A complete caption can include its question directly;
-if the model returns incomplete caption fields, the app uses the verified fact
-plus a simple engagement question instead of discarding the card. Supporting excerpts and URLs from all cited
-sources are kept in the citation; `source.url` is the first supporting source. It
-renders the CBS black-and-gold template as a 1080 × 1080 PNG, uploads it to Sanity,
-creates a draft `post` and its workflow, and submits the card to **In review**.
-It never approves or publishes the card automatically.
+claim. Click **Verify with Exa** to see the audit and linked source list before creating a card.
+You can also enter your own topic. Ideas use the original CBS Post Generator prompt
+and temperature, and remain unverified candidates.
+
+The original audit prompt classifies each checkable part as **supported**,
+**unsupported**, or **contradicted**, quoting evidence in its explanation.
+The original correction prompt changes only unsupported or contradicted parts and
+keeps supported wording close to the original. **Apply suggested correction** uses
+those findings without another search or audit. Editing the suggested correction
+requires verification against the saved excerpts. **Retry source checking** is an
+optional broader search that retains the original evidence. Linked Exa titles,
+publication dates when available, and excerpt previews stay visible alongside the audit.
+
+**Create card & submit for review** renders the chosen fact using the black-and-gold
+1080 × 1080 template, uploads the PNG, creates a draft and workflow, and submits it
+to **In review**. It never approves or publishes automatically. Possible conflicts
+with recent approved/published posts appear as review warnings, as in the original app.
+Saved evidence and prepared facts are signed by the server, bound to your Studio
+user, and expire after 30 minutes. Provider keys stay on the server.
+A separate caption step adds an engagement question and falls back to the selected
+fact plus a simple question if the model returns incomplete caption fields.
 
 Add `OPENAI_API_KEY` and `EXA_API_KEY` to `web/.env.local`, keeping its existing
 Sanity settings, then restart the web app. See `web/.env.example`. Run both apps
@@ -82,8 +81,7 @@ refresh alone does not reload environment settings. Rebuild hosted Studio after
 changing its URL. Never send your Sanity session token to an untrusted generator URL.
 
 The verification and rendering approach is adapted from
-[cbs-post-generator](https://github.com/prophen/cbs-post-generator). Source quotes
-must match actual Exa excerpts. This is a screening step before human review,
+[cbs-post-generator](https://github.com/prophen/cbs-post-generator). The model judges only the supplied Exa excerpts. This is a screening step before human review,
 not a guarantee of historical accuracy. An unsupported result stops before
 creating a post. If saving fails after generation, use **Retry saving this card**
 to reuse the result without another paid generation request. A created draft is
@@ -157,4 +155,4 @@ file is included in the deployment trace. It needs no keys and saves no post.
 
 Caption-only workflow feedback preserves the verified fact, citation, and card.
 Image-only feedback renders the existing fact again. Factual or source changes
-use verification; a checked correction can return to review, never approval.
+use verification; a correction based on the audit can return to review, never approval.
