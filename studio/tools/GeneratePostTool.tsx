@@ -1,3 +1,4 @@
+import {plainSourceText} from '../../shared/citation'
 import {useRef, useState} from 'react'
 import type {Finding, Evidence} from '../../shared/generate-post'
 import {GeneratorPage} from './GeneratePostStyles'
@@ -470,7 +471,7 @@ export function GeneratePostTool() {
                   {source.title}
                 </a>
                 {source.publishedDate && <small> · {source.publishedDate.slice(0, 10)}</small>}
-                <p>{source.highlights[0]?.slice(0, 280)}</p>
+                <p>{plainSourceText(source.highlights[0] || '').slice(0, 280)}</p>
               </li>
             ))}
           </ul>

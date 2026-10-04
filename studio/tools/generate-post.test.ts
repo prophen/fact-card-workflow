@@ -41,7 +41,7 @@ test('drafts, audits and separately captions a supported fact', async () => {
   const post = await generatePost('schools', settings, request)
   expect(post.factText).toBe(claim)
   expect(post.caption.endsWith('?')).toBe(true)
-  expect(post.source.citation).toContain(claim)
+  expect(post.source.citation).toContain('Archive')
   expect(post.source.url).toBe('https://example.org/archive')
   expect(post.verification?.findings).toEqual(supported.findings)
   expect(request).toHaveBeenCalledTimes(4)
@@ -344,7 +344,7 @@ test('broader searches retain earlier evidence even if it is absent from the new
     previous,
   )
   expect(post.verification?.sources).toHaveLength(2)
-  expect(post.source.citation).toContain(claim)
+  expect(post.source.citation).toContain('Original archive')
 })
 
 test('longer text from the same source augments rather than replaces its earlier highlights', async () => {

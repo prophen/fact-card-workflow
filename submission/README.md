@@ -3,7 +3,7 @@
 The DEV article is a reviewable draft, not a published entry.
 
 - [Article draft](dev-post.md): follows the official headings and includes the project ID, repository, build story, and credits.
-- [Demo recording script](demo-script.md): shows the approval gate, rejection loop, and publication handoff in about four minutes.
+- [Demo recording script](demo-script.md): shows topic ideas, the claim audit and linked Exa sources, suggested correction, the approval gate, rejection loop, and publication handoff in 4–5 minutes.
 - [Submission checklist](checklist.md): required fields and final deployment/judge-access checks.
 - [Selected prompt notes](prompt-notes.md): actual user requests; not a fabricated session transcript.
 - [Cover image](assets/cover.png): existing 1200 × 630 CBS social preview.

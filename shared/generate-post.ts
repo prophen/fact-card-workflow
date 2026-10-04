@@ -1,3 +1,4 @@
+import { sourceCitation } from "./citation";
 import {
   AUDIT_PROMPT,
   FIX_PROMPT,
@@ -282,16 +283,12 @@ ${JSON.stringify(findings, null, 2)}`,
     combined && combined.length <= 700
       ? combined
       : `${claim} What would you like to learn about this story?`;
-  const citations = evidence.map((source) => ({
-    citation: `${source.title}. ${source.highlights.join(" ").slice(0, 1500)}`,
-    url: source.url,
-  }));
   return {
     factText: claim,
     caption,
     source: {
-      citation: citations.map((c) => `${c.citation} (${c.url})`).join("\n\n"),
-      url: citations[0].url,
+      citation: sourceCitation(evidence),
+      url: evidence[0].url,
     },
     verification: {
       originalClaim: correctionAudit?.originalClaim || claim,
