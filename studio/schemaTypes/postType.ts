@@ -1,3 +1,4 @@
+import {SourceCitationInput} from '../components/SourceCitationInput'
 import {defineField, defineType} from 'sanity'
 
 export const postType = defineType({
@@ -7,7 +8,10 @@ export const postType = defineType({
   initialValue: {status: 'generating'},
   fields: [
     defineField({
-      name: 'generationError', title: 'Replacement generation error', type: 'text', readOnly: true,
+      name: 'generationError',
+      title: 'Replacement generation error',
+      type: 'text',
+      readOnly: true,
       hidden: ({document}) => !document?.generationError,
       description: 'Correct the issue, then use Retry generating replacement in the Workflow tab.',
     }),
@@ -25,7 +29,12 @@ export const postType = defineType({
       title: 'Source',
       type: 'object',
       fields: [
-        defineField({name: 'citation', title: 'Citation', type: 'text'}),
+        defineField({
+          name: 'citation',
+          title: 'Citation',
+          type: 'text',
+          components: {input: SourceCitationInput},
+        }),
         defineField({
           name: 'url',
           title: 'Verified source URL',
@@ -77,7 +86,8 @@ export const postType = defineType({
       type: 'string',
       readOnly: true,
       initialValue: 'generating',
-      description: 'Updated automatically by the workflow. To approve or reject this post, open the Workflows tab and use its review actions.',
+      description:
+        'Updated automatically by the workflow. To approve or reject this post, open the Workflows tab and use its review actions.',
       options: {
         list: [
           {title: 'Generating', value: 'generating'},

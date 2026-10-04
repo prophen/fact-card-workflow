@@ -1,15 +1,20 @@
 export function revisionScope(
   note: string,
 ): "caption" | "image" | "presentation" | "content" {
+  // Instructions to preserve content are not requests to regenerate that content.
+  const changes = note.replace(
+    /\b(?:keep|preserve|retain|leave)\b[^.!?]*\b(?:unchanged|the same|as is|as-is)\b[.!?]?/gi,
+    "",
+  );
   // Ambiguous or factual feedback takes the full verification path.
   if (
     /\b(fact|claim|source|citation|year|date|topic|story|history|historical)\b|replace.*post/i.test(
-      note,
+      changes,
     )
   )
     return "content";
-  const caption = /\b(caption|question|engagement|cta)\b/i.test(note);
-  const image = /\b(image|png|layout|template|render|card)\b/i.test(note);
+  const caption = /\b(caption|question|engagement|cta)\b/i.test(changes);
+  const image = /\b(image|png|layout|template|render|card)\b/i.test(changes);
   return caption && image
     ? "presentation"
     : caption

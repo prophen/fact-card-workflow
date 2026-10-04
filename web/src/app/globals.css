@@ -684,3 +684,10 @@ button {
       border-color 0.15s;
   }
 }
+
+.source-markdown { overflow-wrap: anywhere; white-space: normal; }
+.source-markdown p { margin: 0 0 12px; }
+.source-markdown ul, .source-markdown ol { padding-left: 24px; margin: 12px 0; }
+.source-markdown h1, .source-markdown h2, .source-markdown h3 { font-size: 18px; margin: 18px 0 8px; }
+.source-markdown details { margin-top: 16px; }
+.source-markdown summary { cursor: pointer; font-weight: 600; }

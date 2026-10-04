@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import type { SanityClient } from "@sanity/client";
 import { extractDocumentId, type EffectHandler } from "@sanity/workflow-engine";
 import { revisionScope, reviseCaption } from "../../shared/revise-presentation";
@@ -150,17 +151,49 @@ export function regenerationHandler(client: SanityClient): EffectHandler {
           asset: { _type: "reference", _ref: asset._id },
         };
       }
-      // Do not overwrite edits made by a reviewer while the providers were running.
-      await client
-        .patch(draftId)
-        .ifRevisionId(post._rev)
-        .set({
-          ...content,
-
-          regenerationKey: ctx.effectKey,
-        })
-        .unset(["generationError"])
-        .commit();
+      // Status synchronization can change _rev while generation runs. Compare the
+      // editable content, then guard the fresh revision so actual edits stay protected.
+      const editableFields = [
+        "topic",
+        "factText",
+        "caption",
+        "source",
+        "image",
+        "renderTemplate",
+        "regenerationKey",
+      ] as const;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const latest = await client.getDocument<Post>(draftId);
+        if (!latest) throw new Error("The post no longer exists.");
+        if (latest.regenerationKey === ctx.effectKey) return;
+        if (
+          editableFields.some(
+            (field) => !isDeepStrictEqual(latest[field], post![field]),
+          )
+        )
+          throw new Error(
+            "The post was edited while generating the replacement. Review your changes before retrying.",
+          );
+        if (!(await isCurrent()))
+          throw new Error(
+            "The workflow changed while generating the replacement.",
+          );
+        try {
+          await client
+            .patch(draftId)
+            .ifRevisionId(latest._rev)
+            .set({ ...content, regenerationKey: ctx.effectKey })
+            .unset(["generationError"])
+            .commit();
+          break;
+        } catch (error) {
+          if (
+            attempt === 2 ||
+            (error as { statusCode?: number })?.statusCode !== 409
+          )
+            throw error;
+        }
+      }
     } catch (error) {
       if (await isCurrent()) {
         await client

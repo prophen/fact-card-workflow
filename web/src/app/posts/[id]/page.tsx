@@ -1,4 +1,4 @@
-import { displayCitation } from "../../../../../shared/citation";
+import { SourceCitation } from "@/components/source-citation";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPost } from "@/sanity/posts";
@@ -76,11 +76,11 @@ export default async function PostPage({
             </section>
             <section className="detail-section">
               <h2>Source</h2>
-              <p className="citation-text">
-                {post.source?.citation
-                  ? displayCitation(post.source.citation)
-                  : "The source will appear when generation is complete."}
-              </p>
+              {post.source?.citation ? (
+                <SourceCitation citation={post.source.citation} />
+              ) : (
+                <p>The source will appear when generation is complete.</p>
+              )}
               {sourceUrl ? (
                 <a
                   className="source-link"

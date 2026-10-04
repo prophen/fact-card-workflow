@@ -36,6 +36,7 @@
     "@sanity/workflow-studio-plugin": "0.36.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "react-markdown": "^10.1.0",
     "sanity": "^6.17.0",
     "styled-components": "^6.5.3"
   },

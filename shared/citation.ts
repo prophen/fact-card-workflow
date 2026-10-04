@@ -32,3 +32,17 @@ export function displayCitation(citation: string): string {
     .filter(Boolean)
     .join("\n\n");
 }
+
+/** Turn the compact source bibliography into clickable Markdown links. */
+export function citationMarkdown(citation: string): string {
+  return citation
+    .split(/\n\s*\n/)
+    .map((entry) => {
+      if (entry.length > 300 || /\[[^\]]+\]\(/.test(entry)) return entry;
+      const match = entry.match(/^([^\n]+) \((https?:\/\/[^\s)]+)\)$/);
+      return match
+        ? `[${match[1].replace(/[\[\]]/g, "")}](${match[2]})`
+        : entry;
+    })
+    .join("\n\n");
+}

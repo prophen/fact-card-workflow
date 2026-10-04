@@ -1,3 +1,5 @@
+import Markdown from 'react-markdown'
+import {citationMarkdown} from '../../shared/citation'
 import {plainSourceText} from '../../shared/citation'
 import {useRef, useState} from 'react'
 import type {Finding, Evidence} from '../../shared/generate-post'
@@ -472,6 +474,10 @@ export function GeneratePostTool() {
                 </a>
                 {source.publishedDate && <small> · {source.publishedDate.slice(0, 10)}</small>}
                 <p>{plainSourceText(source.highlights[0] || '').slice(0, 280)}</p>
+                <details>
+                  <summary>Read source excerpts</summary>
+                  <Markdown skipHtml>{source.highlights.join('\n\n')}</Markdown>
+                </details>
               </li>
             ))}
           </ul>
@@ -530,7 +536,7 @@ export function GeneratePostTool() {
             <h2>Facebook caption</h2>
             <p>{result.caption}</p>
             <h2>Source</h2>
-            <p>{result.source.citation}</p>
+            <Markdown skipHtml>{citationMarkdown(result.source.citation)}</Markdown>
             <a href={result.source.url} target="_blank" rel="noreferrer">
               Read the source
             </a>
