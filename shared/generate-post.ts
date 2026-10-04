@@ -1,3 +1,4 @@
+import type { AuditState, AuditRecord } from "./audit-types";
 import { sourceCitation } from "./citation";
 import {
   AUDIT_PROMPT,
@@ -9,6 +10,7 @@ export type GeneratedPost = {
   caption: string;
   source: { citation: string; url: string };
   verification?: {
+    history?: AuditRecord[];
     originalClaim: string;
     findings: Finding[];
     sources: Evidence[];
@@ -25,6 +27,7 @@ export type Finding = {
 };
 export class SourceVerificationError extends Error {
   readonly code = "SOURCE_VERIFICATION_FAILED";
+  audit: AuditState;
   constructor(
     message: string,
     readonly candidateClaim: string,
@@ -35,6 +38,12 @@ export class SourceVerificationError extends Error {
   ) {
     super(message);
     this.name = "SourceVerificationError";
+    this.audit = {
+      originalClaim: candidateClaim,
+      findings,
+      sources,
+      history: [{ kind: "initial", at: new Date().toISOString(), findings }],
+    };
   }
 }
 export type Evidence = {
@@ -62,7 +71,11 @@ export async function generatePost(
   previousFacts: string[] = [],
   previousEvidence: Evidence[] = [],
   preparingRewrite = false,
-  correctionAudit?: { originalClaim: string; findings: Finding[] },
+  correctionAudit?: {
+    originalClaim: string;
+    findings: Finding[];
+    history?: AuditRecord[];
+  },
 ): Promise<GeneratedPost> {
   async function json(
     url: string,
@@ -183,7 +196,8 @@ Excerpt: ${source.highlights.join(" ").slice(0, 1500)}`,
   const audited = correctionAudit
     ? { findings: correctionAudit.findings }
     : await completion(
-        AUDIT_PROMPT,
+        AUDIT_PROMPT +
+          " First does not mean only. A later occurrence, chapter, or revival does not contradict an earlier first occurrence. Contradicted requires incompatible evidence about the same assertion.",
         `Claim: ${claim}
 
 Source excerpts:
@@ -291,6 +305,9 @@ ${JSON.stringify(findings, null, 2)}`,
       url: evidence[0].url,
     },
     verification: {
+      history: correctionAudit?.history || [
+        { kind: "initial", at: new Date().toISOString(), findings },
+      ],
       originalClaim: correctionAudit?.originalClaim || claim,
       findings,
       sources: evidence,

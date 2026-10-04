@@ -1,3 +1,4 @@
+import {claimAuditField} from './claimAuditFields'
 import {SourceCitationInput} from '../components/SourceCitationInput'
 import {defineField, defineType} from 'sanity'
 
@@ -7,6 +8,7 @@ export const postType = defineType({
   type: 'document',
   initialValue: {status: 'generating'},
   fields: [
+    claimAuditField,
     defineField({
       name: 'generationError',
       title: 'Replacement generation error',

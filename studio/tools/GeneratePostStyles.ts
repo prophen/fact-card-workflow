@@ -302,4 +302,24 @@ export const GeneratorPage = styled.div`
   .sources-list a {
     overflow-wrap: anywhere;
   }
+  .audit-review-panel {
+    border-top: 1px solid var(--line);
+    padding-top: 20px;
+    margin-top: 24px;
+  }
+  .audit-review-panel select {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 16px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: white;
+    color: var(--ink);
+  }
+  .audit-review-panel p {
+    margin-top: 16px;
+    font-size: 13px;
+    color: var(--muted);
+  }
 `

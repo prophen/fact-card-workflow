@@ -1,3 +1,4 @@
+import { storedAudit } from "../../shared/store-audit";
 import { isDeepStrictEqual } from "node:util";
 import type { SanityClient } from "@sanity/client";
 import { extractDocumentId, type EffectHandler } from "@sanity/workflow-engine";
@@ -19,6 +20,7 @@ type Post = {
   image?: { asset?: { _ref?: string } };
   renderTemplate?: string;
   regenerationKey?: string;
+  claimAudits?: Record<string, unknown>[];
 };
 
 export function regenerationHandler(client: SanityClient): EffectHandler {
@@ -127,6 +129,17 @@ export function regenerationHandler(client: SanityClient): EffectHandler {
           generated = error.preparedRewrite;
         }
         content = {
+          ...(generated.verification
+            ? {
+                claimAudits: [
+                  ...(post.claimAudits || []),
+                  storedAudit({
+                    ...generated.verification,
+                    history: generated.verification.history || [],
+                  }),
+                ],
+              }
+            : {}),
           factText: generated.factText,
           caption: generated.caption,
           source: { _type: "source", ...generated.source },
@@ -161,6 +174,7 @@ export function regenerationHandler(client: SanityClient): EffectHandler {
         "image",
         "renderTemplate",
         "regenerationKey",
+        "claimAudits",
       ] as const;
       for (let attempt = 0; attempt < 3; attempt++) {
         const latest = await client.getDocument<Post>(draftId);

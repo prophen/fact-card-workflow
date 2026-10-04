@@ -1,3 +1,8 @@
+import type { AuditState } from "../../../../../shared/audit-types";
+import {
+  recheckFinding,
+  overrideAudit,
+} from "../../../../../shared/audit-review";
 import { createClient } from "next-sanity";
 import {
   readRevisionContext,
@@ -91,19 +96,25 @@ export async function POST(request: Request) {
   const openaiKey = process.env.OPENAI_API_KEY;
   const exaKey = process.env.EXA_API_KEY;
   let topic: string;
-  let mode: "ideas" | "post" | "verify" = "post";
+  let mode: "ideas" | "post" | "verify" | "recheck" | "override" = "post";
   let candidateClaim: string | undefined;
   let retrySources = false;
   let sourceEvidence: Evidence[] = [];
   let preparedRewrite: GeneratedPost | undefined;
   let acceptRewrite = false;
+  let audit: AuditState | undefined;
+  let explanation = "";
+  let sourceUrl = "";
+  let findingIndex = -1;
   try {
     const body = await request.json();
     if (
       body.mode !== undefined &&
       body.mode !== "ideas" &&
       body.mode !== "post" &&
-      body.mode !== "verify"
+      body.mode !== "verify" &&
+      body.mode !== "recheck" &&
+      body.mode !== "override"
     )
       return reply(request, { error: "Invalid generation mode." }, 400);
     mode = body.mode || "post";
@@ -134,6 +145,7 @@ export async function POST(request: Request) {
         );
         sourceEvidence = context.sources;
         preparedRewrite = context.preparedRewrite;
+        audit = context.audit;
       } catch (error) {
         return reply(
           request,
@@ -146,6 +158,59 @@ export async function POST(request: Request) {
           400,
         );
       }
+    }
+    if (mode === "recheck" || mode === "override") {
+      if (
+        !audit ||
+        candidateClaim !== audit.originalClaim ||
+        !audit.sources.length
+      )
+        return reply(
+          request,
+          {
+            error: "Choose the original audited claim with its saved sources.",
+          },
+          400,
+        );
+      if (audit.history.length >= 20)
+        return reply(
+          request,
+          {
+            error:
+              "This audit has reached its review limit. Start a fresh verification.",
+          },
+          400,
+        );
+      if (
+        typeof body.explanation !== "string" ||
+        !body.explanation.trim() ||
+        body.explanation.length > 1500
+      )
+        return reply(
+          request,
+          {
+            error:
+              "Explain why you disagree with the audit (1–1500 characters).",
+          },
+          400,
+        );
+      explanation = body.explanation.trim();
+      sourceUrl = typeof body.sourceUrl === "string" ? body.sourceUrl : "";
+      findingIndex = body.findingIndex;
+      if (
+        mode === "recheck" &&
+        (!Number.isInteger(findingIndex) || !audit.findings[findingIndex])
+      )
+        return reply(request, { error: "Choose a finding to recheck." }, 400);
+      if (
+        mode === "override" &&
+        !audit.sources.some((source) => source.url === sourceUrl)
+      )
+        return reply(
+          request,
+          { error: "Choose a supporting source from this audit." },
+          400,
+        );
     }
     if (
       body.retrySources !== undefined &&
@@ -193,7 +258,13 @@ export async function POST(request: Request) {
   } catch {
     return reply(request, { error: "Invalid generation request." }, 400);
   }
-  if (!openaiKey || (mode !== "ideas" && !exaKey))
+  if (
+    !openaiKey ||
+    ((mode === "post" || mode === "verify") &&
+      !acceptRewrite &&
+      (!sourceEvidence.length || retrySources) &&
+      !exaKey)
+  )
     return reply(
       request,
       {
@@ -204,7 +275,7 @@ export async function POST(request: Request) {
       },
       503,
     );
-  const requestKey = `${user.id}:${retrySources ? "source-retry" : sourceEvidence.length ? "correction" : mode}`;
+  const requestKey = `${user.id}:${mode === "recheck" || mode === "override" ? mode : retrySources ? "source-retry" : sourceEvidence.length ? "correction" : mode}`;
   if (
     active.has(user.id) ||
     Date.now() - (lastRequest.get(requestKey) || 0) < 10000
@@ -232,6 +303,57 @@ export async function POST(request: Request) {
       });
       return reply(request, { claims }, 200);
     }
+    if (mode === "recheck" || mode === "override") {
+      const reviewed =
+        mode === "recheck"
+          ? await recheckFinding(audit!, findingIndex, explanation, user.id, {
+              openaiKey,
+              model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+            })
+          : overrideAudit(audit!, explanation, sourceUrl, user.id);
+      const canCreate =
+        mode === "override" ||
+        reviewed.findings.every((finding) => finding.status === "supported");
+      let prepared: GeneratedPost | undefined;
+      if (canCreate) {
+        prepared = await generatePost(
+          topic,
+          {
+            openaiKey,
+            exaKey: exaKey!,
+            model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+          },
+          fetch,
+          undefined,
+          reviewed.originalClaim,
+          false,
+          [],
+          reviewed.sources,
+          true,
+          reviewed,
+        );
+        if (prepared.verification) prepared.verification.corrected = false;
+        if (mode === "override") prepared.source.url = sourceUrl;
+      }
+      return reply(
+        request,
+        {
+          audit: reviewed,
+          findings: reviewed.findings,
+          sources: reviewed.sources,
+          readyClaim: prepared?.factText,
+          sourceContext: signSourceContext(
+            reviewed.sources,
+            user.id,
+            openaiKey,
+            Date.now(),
+            prepared,
+            reviewed,
+          ),
+        },
+        200,
+      );
+    }
     const previousFacts = await client.fetch<string[]>(
       '*[_type == "post" && status in ["approved", "published"] && !(_id in path("versions.**"))] | order(_updatedAt desc)[0...100].factText',
       {},
@@ -253,6 +375,16 @@ export async function POST(request: Request) {
           previousFacts,
           sourceEvidence,
         );
+    if (
+      !acceptRewrite &&
+      audit &&
+      post.verification?.originalClaim === audit.originalClaim
+    ) {
+      post.verification.history = [
+        ...audit.history,
+        ...(post.verification.history || []),
+      ];
+    }
     if (mode === "verify")
       return reply(
         request,
@@ -264,6 +396,12 @@ export async function POST(request: Request) {
             openaiKey,
             Date.now(),
             post,
+            post.verification
+              ? {
+                  ...post.verification,
+                  history: post.verification.history || [],
+                }
+              : undefined,
           ),
         },
         200,
@@ -271,13 +409,18 @@ export async function POST(request: Request) {
     const png = await renderCard(post.factText);
     return reply(request, { ...post, cardPng: png.toString("base64") }, 200);
   } catch (error) {
-    if (error instanceof SourceVerificationError)
+    if (error instanceof SourceVerificationError) {
+      if (audit && audit.originalClaim === error.candidateClaim)
+        error.audit.history = [...audit.history, ...error.audit.history];
+      if (error.preparedRewrite?.verification)
+        error.preparedRewrite.verification.history = error.audit.history;
       return reply(
         request,
         {
           error: error.message,
           code: error.code,
           candidateClaim: error.candidateClaim,
+          audit: error.audit,
           findings: error.findings,
           suggestedCorrection: error.suggestedCorrection,
           rewriteReady: Boolean(error.preparedRewrite),
@@ -290,12 +433,14 @@ export async function POST(request: Request) {
                   openaiKey,
                   Date.now(),
                   error.preparedRewrite,
+                  error.audit,
                 ),
               }
             : {}),
         },
         422,
       );
+    }
     console.error("[post-generation] provider request failed", {
       mode,
       elapsedMs: Date.now() - startedAt,

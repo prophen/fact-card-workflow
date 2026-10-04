@@ -59,6 +59,16 @@ requires verification against the saved excerpts. **Retry source checking** is a
 optional broader search that retains the original evidence. Linked Exa titles,
 publication dates when available, and excerpt previews stay visible alongside the audit.
 
+If an audit appears incorrect, **Recheck this finding** reassesses only that part
+against the saved excerpts, using your explanation and without another Exa search.
+**Keep original claim · record override** requires an explanation and a supporting
+source from the audit. It preserves the model verdict alongside your editorial
+decision. The original findings, rechecks, and overrides are saved in the post’s
+read-only **Claim audit and reviewer decisions** field. An override permits card
+creation and submission for review; it does not approve or publish the post.
+The audit prompt also distinguishes “first” from “only,” so a later occurrence
+should not be treated as contradicting an earlier first occurrence.
+
 **Create card & submit for review** renders the chosen fact using the black-and-gold
 1080 × 1080 template, uploads the PNG, creates a draft and workflow, and submits it
 to **In review**. It never approves or publishes automatically. Possible conflicts

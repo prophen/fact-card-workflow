@@ -1,3 +1,4 @@
+import type { AuditState } from "./audit-types";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Evidence, GeneratedPost } from "./generate-post";
 
@@ -9,11 +10,13 @@ export function signSourceContext(
   key: string,
   now = Date.now(),
   preparedRewrite?: GeneratedPost,
+  audit?: AuditState,
 ) {
   const payload = Buffer.from(
     JSON.stringify({
       sources,
       preparedRewrite,
+      audit,
       user,
       expires: now + 30 * 60_000,
     }),
@@ -29,7 +32,11 @@ export function readRevisionContext(
   user: string,
   key: string,
   now = Date.now(),
-): { sources: Evidence[]; preparedRewrite?: GeneratedPost } {
+): {
+  sources: Evidence[];
+  preparedRewrite?: GeneratedPost;
+  audit?: AuditState;
+} {
   if (typeof token !== "string" || token.length > 400_000)
     throw new Error("Invalid source context.");
   const [payload, signature, extra] = token.split(".");
@@ -55,7 +62,11 @@ export function readRevisionContext(
       "Your saved sources expired. Choose the claim again to run a fresh source check.",
     );
   }
-  return { sources: data.sources, preparedRewrite: data.preparedRewrite };
+  return {
+    sources: data.sources,
+    preparedRewrite: data.preparedRewrite,
+    audit: data.audit,
+  };
 }
 
 export function readSourceContext(

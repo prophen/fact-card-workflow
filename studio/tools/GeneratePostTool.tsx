@@ -1,3 +1,5 @@
+import type {AuditState} from '../../shared/audit-types'
+import {storedAudit} from '../../shared/store-audit'
 import Markdown from 'react-markdown'
 import {citationMarkdown} from '../../shared/citation'
 import {plainSourceText} from '../../shared/citation'
@@ -15,6 +17,7 @@ type GeneratedPost = {
   caption: string
   source: {citation: string; url: string}
   verification?: {
+    history?: AuditState['history']
     originalClaim: string
     findings: Finding[]
     sources: Evidence[]
@@ -43,6 +46,10 @@ export function GeneratePostTool() {
   const [conflicts, setConflicts] = useState<{fact: string; reason: string}[]>([])
   const [sources, setSources] = useState<Evidence[]>([])
   const [readyClaim, setReadyClaim] = useState<string | null>(null)
+  const [audit, setAudit] = useState<AuditState | undefined>()
+  const [reviewFinding, setReviewFinding] = useState<number | null>(null)
+  const [reviewExplanation, setReviewExplanation] = useState('')
+  const [supportingUrl, setSupportingUrl] = useState('')
   const [findings, setFindings] = useState<Finding[]>([])
   const [preparedClaim, setPreparedClaim] = useState<string | null>(null)
   const [sourceContext, setSourceContext] = useState<string | undefined>()
@@ -69,6 +76,17 @@ export function GeneratePostTool() {
           caption: post.caption,
           renderTemplate: template,
           status: 'generating',
+          ...(post.verification
+            ? {
+                claimAudits: [
+                  storedAudit({
+                    ...post.verification,
+                    sources: post.verification.sources,
+                    history: post.verification.history || [],
+                  }),
+                ],
+              }
+            : {}),
         })
         draftId.current = draft._id
       }
@@ -196,6 +214,9 @@ export function GeneratePostTool() {
       if (!response.ok) {
         if (response.status === 400) setSourceContext(undefined)
         if (data.code === 'SOURCE_VERIFICATION_FAILED' && typeof data.candidateClaim === 'string') {
+          setAudit(data.audit)
+          setReviewFinding(null)
+          setSupportingUrl(data.sources?.[0]?.url || '')
           setSources(Array.isArray(data.sources) ? data.sources : [])
           setPreparedClaim(data.rewriteReady ? data.suggestedCorrection : null)
           setRetryClaim(data.candidateClaim)
@@ -208,6 +229,9 @@ export function GeneratePostTool() {
         throw new Error(data.error || 'Generation failed.')
       }
       if (!acceptRewrite) {
+        setAudit(data.verification)
+        setReviewFinding(null)
+        setSupportingUrl(data.verification?.sources?.[0]?.url || '')
         setConflicts(data.verification?.conflicts || [])
         setSources(data.verification?.sources || [])
         setFindings(data.verification?.findings || [])
@@ -233,6 +257,62 @@ export function GeneratePostTool() {
       if (retrySources && candidateClaim) setRetryClaim(candidateClaim)
       setError(cause instanceof Error ? cause.message : 'Could not reach the generation server.')
       setProgress('')
+      setBusy(false)
+    }
+  }
+
+  async function reviewAudit(mode: 'recheck' | 'override') {
+    if (!audit || !sourceContext) return
+    setBusy(true)
+    setError('')
+    setProgress(
+      mode === 'recheck'
+        ? 'Rechecking this finding against the saved excerpts…'
+        : 'Recording your decision to keep the original claim…',
+    )
+    try {
+      const token = client.config().token
+      if (!token) throw new Error('Sign in to Studio to review an audit.')
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', Authorization: `Bearer ${token}`},
+        body: JSON.stringify({
+          mode,
+          topic,
+          candidateClaim: audit.originalClaim,
+          sourceContext,
+          findingIndex: reviewFinding,
+          explanation: reviewExplanation,
+          sourceUrl: supportingUrl,
+        }),
+        signal: AbortSignal.timeout(120000),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Could not review this finding.')
+      setAudit(data.audit)
+      setFindings(data.findings)
+      setSources(data.sources)
+      setSourceContext(data.sourceContext)
+      setReadyClaim(data.readyClaim || null)
+      setPreparedClaim(null)
+      setCorrection(null)
+      setReviewFinding(null)
+      setReviewExplanation('')
+      if (data.readyClaim) {
+        setTopic(data.readyClaim)
+        setSelectedClaim(data.readyClaim)
+      }
+      setProgress(
+        mode === 'override'
+          ? 'Reviewer override recorded. The original claim can be made into a card and still needs approval.'
+          : data.readyClaim
+            ? 'Recheck complete. All findings are supported; ready to create a card.'
+            : 'Recheck saved. Review the remaining findings before creating a card.',
+      )
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The audit review failed.')
+      setProgress('')
+    } finally {
       setBusy(false)
     }
   }
@@ -296,6 +376,9 @@ export function GeneratePostTool() {
                     type="button"
                     disabled={busy || ideasBusy || Boolean(result && !submitted)}
                     onClick={() => {
+                      setAudit(undefined)
+                      setReviewFinding(null)
+                      setReviewExplanation('')
                       setSources([])
                       setReadyClaim(null)
                       setConflicts([])
@@ -339,6 +422,9 @@ export function GeneratePostTool() {
               maxLength={selectedClaim !== undefined ? 400 : 500}
               value={topic}
               onChange={(event) => {
+                setAudit(undefined)
+                setReviewFinding(null)
+                setReviewExplanation('')
                 setSources([])
                 setConflicts([])
                 setReadyClaim(null)
@@ -446,11 +532,13 @@ export function GeneratePostTool() {
         <section className="step-panel" aria-label="Claim audit">
           <h2>Claim audit</h2>
           <p>
-            {findings.some((f) => f.status === 'contradicted')
-              ? 'Sources contradict part of the original claim.'
-              : findings.some((f) => f.status === 'unsupported')
-                ? 'Some parts of the original claim lack source support.'
-                : 'The sources back the claim.'}
+            {audit?.history.at(-1)?.kind === 'override'
+              ? 'Reviewer override recorded. The model findings remain below; this post still needs approval.'
+              : findings.some((f) => f.status === 'contradicted')
+                ? 'The model audit marks part of the original claim as contradicted.'
+                : findings.some((f) => f.status === 'unsupported')
+                  ? 'The model audit marks some parts of the original claim as unsupported.'
+                  : 'The sources back the claim.'}
           </p>
           <ul className="audit-list">
             {findings.map((finding, index) => (
@@ -458,9 +546,104 @@ export function GeneratePostTool() {
                 <span className={`claim-status ${finding.status}`}>{finding.status}</span>
                 <strong>{finding.part}</strong>
                 <p>{finding.detail}</p>
+                {audit && !result && (
+                  <button
+                    type="button"
+                    disabled={busy || ideasBusy}
+                    onClick={() => {
+                      setReviewFinding(index)
+                      setReviewExplanation('')
+                    }}
+                  >
+                    Recheck this finding
+                  </button>
+                )}
               </li>
             ))}
           </ul>
+          {audit && !result && (
+            <div className="audit-review-panel">
+              <h3>
+                {reviewFinding !== null
+                  ? `Recheck: ${findings[reviewFinding]?.part}`
+                  : 'Disagree with the audit?'}
+              </h3>
+              <label htmlFor="audit-explanation">Explain why you disagree</label>
+              <textarea
+                id="audit-explanation"
+                rows={3}
+                maxLength={1500}
+                value={reviewExplanation}
+                onChange={(event) => setReviewExplanation(event.target.value)}
+                disabled={busy}
+                placeholder="For example: a later chapter does not contradict this being the first chapter."
+              />
+              {reviewFinding !== null && (
+                <button
+                  type="button"
+                  disabled={busy || !reviewExplanation.trim()}
+                  onClick={() => void reviewAudit('recheck')}
+                >
+                  Recheck using these sources
+                </button>
+              )}
+              <label htmlFor="override-source">Supporting source for a reviewer override</label>
+              <select
+                id="override-source"
+                value={supportingUrl}
+                onChange={(event) => setSupportingUrl(event.target.value)}
+                disabled={busy}
+              >
+                {sources.map((source) => (
+                  <option key={source.url} value={source.url}>
+                    {source.title}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={busy || !reviewExplanation.trim() || !supportingUrl}
+                onClick={() => void reviewAudit('override')}
+              >
+                Keep original claim · record override
+              </button>
+              <p>
+                Your explanation and source are saved with the original audit. This decision allows
+                card creation, not publication.
+              </p>
+            </div>
+          )}
+          {audit && (
+            <details>
+              <summary>Audit history ({audit.history.length})</summary>
+              <ol>
+                {audit.history.map((entry, index) => (
+                  <li key={index}>
+                    <strong>
+                      {entry.kind === 'initial'
+                        ? 'Original audit'
+                        : entry.kind === 'recheck'
+                          ? 'Finding rechecked'
+                          : 'Reviewer override'}
+                    </strong>
+                    <p>{entry.explanation}</p>
+                    {entry.sourceUrl && (
+                      <a href={entry.sourceUrl} target="_blank" rel="noreferrer">
+                        Supporting source
+                      </a>
+                    )}
+                    <ul>
+                      {entry.findings.map((finding, i) => (
+                        <li key={i}>
+                          {finding.status}: {finding.part} — {finding.detail}
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ol>
+            </details>
+          )}
         </section>
       )}
       {sources.length > 0 && (

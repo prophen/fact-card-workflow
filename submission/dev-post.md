@@ -76,6 +76,8 @@ OpenAI produces a candidate claim when I enter my own topic. **Verify with Exa**
 
 If part of a claim isn’t supported or conflicts with the sources, the app suggests a correction while keeping the supported details. **Apply suggested correction** uses the findings already available, without another search or audit. If I edit that suggestion, the edited wording needs verification. Possible contradictions with earlier approved or published posts appear as review warnings.
 
+An audit can be wrong, too. I encountered a finding that treated a later CORE chapter as contradicting an earlier chapter being the first. “First” does not mean “only.” I clarified that distinction in the prompt and added **Recheck this finding**, which uses the same excerpts and my explanation. I can also keep the original claim with a recorded reviewer override, citing a source and explaining my decision. The post retains the original audit, reassessments, and override history. That decision still leads to review, not automatic approval.
+
 Once I’m satisfied with the selected fact, **Create card & submit for review** renders the image and saves a draft with its citation, source URL, and caption ending in a question. Verification and card creation are separate steps, giving me time to inspect the evidence first.
 
 That screening step can still miss historical nuance. The human review gate is part of the design, not an optional cleanup step.
@@ -102,7 +104,7 @@ The frontend came from another practical request: “can we build a frontend tha
 
 Finally, I wanted Studio's **Publish** button to complete the workflow automatically. The button checks the current workflow's approval, and a background Function advances the approved workflow after a published document exists.
 
-The latest local checks passed 52 tests, Studio and web builds, and TypeScript checks. Tests exercise approval restrictions, rejection and retries, caption-only revisions, concurrent status updates, formatted source rendering, card rendering, and publication synchronization. A production-build endpoint check also confirms that accepting a suggested correction reuses its saved evidence without another provider call. I also checked search, filtering, caption copying, mobile layouts, and an actual 1080 × 1080 image download in the browser. The deployed library also loaded successfully, and search, status filtering, caption copying, and image download worked there. The full authenticated workflow still needs its recorded walkthrough and final hosted smoke test.
+The latest local checks passed 56 tests, Studio and web builds, and TypeScript checks. Tests exercise approval restrictions, rejection and retries, caption-only revisions, concurrent status updates, formatted source rendering, card rendering, and publication synchronization. A production-build endpoint check also confirms that accepting a suggested correction reuses its saved evidence without another provider call. I also checked search, filtering, caption copying, mobile layouts, and an actual 1080 × 1080 image download in the browser. The deployed library also loaded successfully, and search, status filtering, caption copying, and image download worked there. The full authenticated workflow still needs its recorded walkthrough and final hosted smoke test.
 
 ### What I would improve next
 

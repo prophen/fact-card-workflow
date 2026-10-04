@@ -2,6 +2,7 @@ const assert=require('node:assert/strict');
 const root=require('node:path').resolve(__dirname, '..');
 const fact='Biddy Mason arrived in California in 1851.';
 let searches=0;let providerRequests=0;
+let testTime=Date.now();Date.now=()=>testTime;
 process.chdir(root+'/web');
 process.env.OPENAI_API_KEY='test-only';process.env.EXA_API_KEY='test-only';
 global.fetch=async(input,options={})=>{
@@ -15,7 +16,8 @@ global.fetch=async(input,options={})=>{
   const isAudit=body.messages[0].content.includes('skeptical fact-checker');
   const input=body.messages[1].content;
   const isFix=body.messages[0].content.includes('You are an editor');
-  const result=isFix?{fact}:isAudit?{findings:[{part:fact,status:'supported',detail:'Test evidence.',sourceIndex:0,quote:fact}, ...(input.includes('It was the first') ? [{part:'It was the first in California.',status:'unsupported',detail:'No evidence supports first.'}] : [])]}:{caption:fact,cta:'What would you like to learn?'};
+  const isRecheck=body.messages[0].content.includes('Reassess one disputed finding');
+  const result=isRecheck?{status:'supported',detail:'The existing excerpt supports the disputed assertion.'}:isFix?{fact}:isAudit?{findings:[{part:fact,status:'supported',detail:'Test evidence.',sourceIndex:0,quote:fact}, ...(input.includes('It was the first') ? [{part:'It was the first in California.',status:'unsupported',detail:'No evidence supports first.'}] : [])]}:{caption:fact,cta:'What would you like to learn?'};
   return Response.json({choices:[{message:{content:JSON.stringify(result)}}]});
  }
  throw Error('Unexpected test request: '+url);
@@ -25,11 +27,25 @@ global.fetch=async(input,options={})=>{
  assert.ok(trace.files.some(file=>file.endsWith('/@resvg/resvg-wasm/index_bg.wasm')), 'The deployment must include the rendering WASM file.');
  const route=require(root+'/web/.next/server/app/api/post-generation/route.js');
  await route.routeModule.ensureUserland();
- const post=(body)=>route.routeModule.userland.POST(new Request('http://localhost/api/post-generation',{method:'POST',headers:{Authorization:'Bearer test-only','Content-Type':'application/json'},body:JSON.stringify(body)}));
+ const post=(body)=>{testTime+=10001;return route.routeModule.userland.POST(new Request('http://localhost/api/post-generation',{method:'POST',headers:{Authorization:'Bearer test-only','Content-Type':'application/json'},body:JSON.stringify(body)}));};
  const failed=await post({topic:fact,candidateClaim:`${fact} It was the first in California.`});
  const revision=await failed.json();assert.equal(failed.status,422,revision.error);
  assert.ok(revision.sourceContext);assert.equal(revision.suggestedCorrection,fact);
  assert.equal(revision.rewriteReady,true);
+ const beforeReviewSearches=searches;
+ const overridden=await post({mode:'override',topic:fact,candidateClaim:revision.candidateClaim,sourceContext:revision.sourceContext,explanation:'The first finding was misinterpreted; retain the original claim for editorial review.',sourceUrl:'https://example.org'});
+ const overrideData=await overridden.json();assert.equal(overridden.status,200,overrideData.error);
+ assert.equal(overrideData.readyClaim,revision.candidateClaim,'An override must preserve the original claim.');
+ assert.equal(overrideData.audit.findings[1].status,'unsupported','An override must not relabel the model findings.');
+ assert.equal(overrideData.audit.history.at(-1).kind,'override');
+ const overrideCard=await post({topic:fact,candidateClaim:overrideData.readyClaim,sourceContext:overrideData.sourceContext,acceptRewrite:true});
+ const overrideCardData=await overrideCard.json();assert.equal(overrideCard.status,200,overrideCardData.error);
+ assert.equal(overrideCardData.verification.history.at(-1).kind,'override','The saved card must retain the reviewer decision.');
+ const rechecked=await post({mode:'recheck',topic:fact,candidateClaim:revision.candidateClaim,sourceContext:revision.sourceContext,explanation:'The existing evidence was misread.',findingIndex:1});
+ const recheckData=await rechecked.json();assert.equal(rechecked.status,200,recheckData.error);
+ assert.equal(recheckData.audit.history[0].findings[1].status,'unsupported');
+ assert.equal(recheckData.audit.findings[1].status,'supported');
+ assert.equal(searches,beforeReviewSearches,'Rechecks and overrides must not search Exa again.');
  const checkedCalls=providerRequests;
  const changed=await post({topic:fact,candidateClaim:'Edited text.',sourceContext:revision.sourceContext,acceptRewrite:true});
  assert.equal(changed.status,400,'Edited rewrites cannot use the instant-accept path.');
