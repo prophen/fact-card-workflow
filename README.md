@@ -51,8 +51,15 @@ You can also type your own topic and generate directly. Suggestions are
 unverified candidates, not approved historical facts. Suggestions focus on one
 concrete event or action rather than a broad biography or impact claim. If evidence
 is insufficient, **Retry source checking** keeps the same candidate and searches
-more sources with longer page text. Unsupported claims still cannot create a post. The tool generates one candidate fact, searches Exa for
-source excerpts, checks support, and writes a caption ending in a question. It
+more sources with longer page text. The tool audits each checkable part across the retrieved sources, following the
+original CBS Post Generator's audit and correction flow. When a claim is mixed or
+contradicted, it shows the findings and offers an editable suggested correction
+where evidence allows. **Apply correction & recheck** runs a fresh source search
+and audit; the suggestion alone cannot create a post. Successful claims are
+cross-checked against up to 100 recent approved/published Sanity posts (including
+approved drafts). A conflict blocks card generation. A separate caption step
+adds a short engagement question. Supporting excerpts and URLs from all cited
+sources are kept in the citation; `source.url` is the first supporting source. It
 renders the CBS black-and-gold template as a 1080 × 1080 PNG, uploads it to Sanity,
 creates a draft `post` and its workflow, and submits the card to **In review**.
 It never approves or publishes the card automatically.

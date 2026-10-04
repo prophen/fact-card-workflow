@@ -56,7 +56,7 @@ Do not assume an authenticated local browser proves judge access. If deployment 
 
 ## Evidence already gathered locally
 
-- Latest workflow and generation suite: 24 passing tests, including publication synchronization.
+- Latest workflow and generation suite: 26 passing tests, including publication synchronization.
 - Studio and web production builds passed.
 - Changed-file lint and type checks passed.
 - Search, filters, caption copying, mobile layouts, and image download tested.

@@ -1,4 +1,6 @@
 import {useRef, useState} from 'react'
+import type {Finding} from '../../shared/generate-post'
+import {GeneratorPage} from './GeneratePostStyles'
 import {useClient} from 'sanity'
 import {IntentLink} from 'sanity/router'
 import {refDataset} from '@sanity/workflow-engine'
@@ -9,6 +11,7 @@ type GeneratedPost = {
   factText: string
   caption: string
   source: {citation: string; url: string}
+  verification?: {originalClaim: string; findings: Finding[]}
   cardPng: string
 }
 const template = 'defaultFactCard'
@@ -28,6 +31,8 @@ export function GeneratePostTool() {
   const [result, setResult] = useState<GeneratedPost | null>(null)
   const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
+  const [findings, setFindings] = useState<Finding[]>([])
+  const [correction, setCorrection] = useState('')
   const [retryClaim, setRetryClaim] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -135,9 +140,12 @@ export function GeneratePostTool() {
     }
   }
 
-  async function generate(retrySources = false) {
-    const candidateClaim = retrySources ? retryClaim || undefined : selectedClaim
+  async function generate(retrySources = false, correctedClaim?: string) {
+    const candidateClaim =
+      correctedClaim || (retrySources ? retryClaim || undefined : selectedClaim)
     setRetryClaim(null)
+    setFindings([])
+    setCorrection('')
     setBusy(true)
     setError('')
     setSubmitted(false)
@@ -148,7 +156,7 @@ export function GeneratePostTool() {
     setProgress(
       retrySources
         ? 'Checking the same claim against more sources and longer source text…'
-        : 'Generating one fact and checking it against Exa source excerpts…',
+        : 'Finding sources, auditing each part of the claim, and preparing the caption…',
     )
     try {
       const token = client.config().token
@@ -162,8 +170,13 @@ export function GeneratePostTool() {
       })
       const data = await response.json()
       if (!response.ok) {
-        if (data.code === 'SOURCE_VERIFICATION_FAILED' && typeof data.candidateClaim === 'string')
+        if (data.code === 'SOURCE_VERIFICATION_FAILED' && typeof data.candidateClaim === 'string') {
           setRetryClaim(data.candidateClaim)
+          setFindings(Array.isArray(data.findings) ? data.findings : [])
+          setCorrection(
+            typeof data.suggestedCorrection === 'string' ? data.suggestedCorrection : '',
+          )
+        }
         throw new Error(data.error || 'Generation failed.')
       }
       if (
@@ -185,123 +198,168 @@ export function GeneratePostTool() {
   }
 
   return (
-    <div
-      style={{
-        padding: 32,
-        maxWidth: 1200,
-        margin: '0 auto',
-        overflow: 'auto',
-        height: '100%',
-        boxSizing: 'border-box',
-      }}
-    >
-      <h1>Generate a fact card</h1>
-      <p>
-        Choose a California Black history topic. We’ll generate one fact, check its source, render a
-        card, and bring it to you for review.
-      </p>
-      <section style={{maxWidth: 680, marginBottom: 32}} aria-labelledby="topic-ideas-heading">
-        <h2 id="topic-ideas-heading">1. Find a story idea</h2>
-        <p>
-          Start with broad categories and get five specific ideas. Ideas still need source checking.
-        </p>
-        <label htmlFor="core-topics">Core topics (comma separated)</label>
-        <textarea
-          id="core-topics"
-          rows={3}
-          maxLength={500}
-          value={coreTopics}
-          onChange={(event) => setCoreTopics(event.target.value)}
-          disabled={busy || ideasBusy || Boolean(result && !submitted)}
-          style={{
-            display: 'block',
-            width: '100%',
-            boxSizing: 'border-box',
-            padding: 12,
-            font: 'inherit',
-            margin: '8px 0 12px',
-          }}
-        />
-        <button
-          type="button"
-          onClick={() => void suggestIdeas()}
-          disabled={busy || ideasBusy || !coreTopics.trim() || Boolean(result && !submitted)}
-          style={{padding: 12, font: 'inherit'}}
-        >
-          {ideasBusy ? 'Finding ideas…' : 'Suggest five ideas'}
-        </button>
-        <p role="status" aria-live="polite">
-          {ideasBusy ? 'Generating unverified claim ideas…' : ''}
-        </p>
-        {ideasError && <p role="alert">{ideasError}</p>}
-        {ideas.length > 0 && (
-          <ul style={{listStyle: 'none', padding: 0, display: 'grid', gap: 12}}>
-            {ideas.map((claim) => (
-              <li key={claim} style={{border: '1px solid #999', borderRadius: 8, padding: 16}}>
-                <p style={{marginTop: 0}}>{claim}</p>
-                <button
-                  type="button"
-                  disabled={busy || ideasBusy || Boolean(result && !submitted)}
-                  onClick={() => {
-                    setRetryClaim(null)
-                    setTopic(claim)
-                    setSelectedClaim(claim)
-                    setError('')
-                    setProgress(
-                      'Idea selected. Generate the post to check its source and render the card.',
-                    )
-                  }}
-                  aria-pressed={selectedClaim === claim}
-                  style={{padding: 8, font: 'inherit'}}
-                >
-                  {selectedClaim === claim ? 'Selected' : 'Use this idea'}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-      <h2>2. Verify and generate a post</h2>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault()
-          void generate()
-        }}
-        style={{display: 'grid', gap: 12, maxWidth: 680}}
-      >
-        <label htmlFor="generation-topic">
-          {selectedClaim !== undefined ? 'Claim to verify' : 'Topic or core topics'}
-        </label>
-        <textarea
-          id="generation-topic"
-          rows={3}
-          maxLength={selectedClaim !== undefined ? 400 : 500}
-          value={topic}
-          onChange={(event) => {
-            setRetryClaim(null)
-            setError('')
-            setTopic(event.target.value)
-            setSelectedClaim(selectedClaim !== undefined ? event.target.value : undefined)
-          }}
-          disabled={busy || ideasBusy || Boolean(result && !submitted)}
-          placeholder="For example: Black communities in Oakland"
-          required
-          style={{padding: 12, font: 'inherit'}}
-        />
-        <button
-          type="submit"
-          disabled={busy || ideasBusy || !topic.trim() || Boolean(result && !submitted)}
-          style={{padding: 12, font: 'inherit', cursor: 'pointer'}}
-        >
-          Generate post
-        </button>
-      </form>
-      <p role="status" aria-live="polite">
+    <GeneratorPage>
+      <header className="page-header">
+        <span className="eyebrow">California Black Stories · Create</span>
+        <h1>
+          Find a story.
+          <br />
+          Make it worth sharing.
+        </h1>
+        <p>Choose one fact, check the evidence, and create a card for your review.</p>
+        <div className="workflow-strip" aria-label="Post workflow">
+          <span className="active">Generate</span>
+          <span>Review</span>
+          <span>Approve</span>
+          <span>Publish</span>
+        </div>
+      </header>
+      <div className="steps">
+        <section className="step-panel" aria-labelledby="topic-ideas-heading">
+          <span className="eyebrow">Step 01 · Explore</span>
+          <h2 id="topic-ideas-heading">Find a story idea</h2>
+          <p>
+            Start with broad categories and get five specific ideas. Ideas still need source
+            checking.
+          </p>
+          <label htmlFor="core-topics">Core topics (comma separated)</label>
+          <textarea
+            id="core-topics"
+            rows={3}
+            maxLength={500}
+            value={coreTopics}
+            onChange={(event) => setCoreTopics(event.target.value)}
+            disabled={busy || ideasBusy || Boolean(result && !submitted)}
+          />
+          <button
+            type="button"
+            onClick={() => void suggestIdeas()}
+            disabled={busy || ideasBusy || !coreTopics.trim() || Boolean(result && !submitted)}
+          >
+            {ideasBusy ? 'Finding ideas…' : 'Suggest five ideas'}
+          </button>
+          <p role="status" aria-live="polite">
+            {ideasBusy ? 'Generating unverified claim ideas…' : ''}
+          </p>
+          {ideasError && (
+            <p className="error-panel" role="alert">
+              {' '}
+              {ideasError}
+            </p>
+          )}
+          {ideas.length > 0 && (
+            <ul className="ideas-list">
+              {ideas.map((claim) => (
+                <li key={claim} data-selected={selectedClaim === claim}>
+                  <p>{claim}</p>
+                  <button
+                    type="button"
+                    disabled={busy || ideasBusy || Boolean(result && !submitted)}
+                    onClick={() => {
+                      setRetryClaim(null)
+                      setFindings([])
+                      setCorrection('')
+                      setTopic(claim)
+                      setSelectedClaim(claim)
+                      setError('')
+                      setProgress(
+                        'Idea selected. Generate the post to check its source and render the card.',
+                      )
+                    }}
+                    aria-pressed={selectedClaim === claim}
+                  >
+                    {selectedClaim === claim ? 'Selected' : 'Use this idea'}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+        <section className="step-panel" aria-labelledby="generate-heading">
+          <span className="eyebrow">Step 02 · Create</span>
+          <h2 id="generate-heading">Verify & generate</h2>
+          <p>
+            Use an idea from the list, or enter a topic of your own. Only a supported fact moves to
+            review.
+          </p>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault()
+              void generate()
+            }}
+          >
+            <label htmlFor="generation-topic">
+              {selectedClaim !== undefined ? 'Claim to verify' : 'Topic or core topics'}
+            </label>
+            <textarea
+              id="generation-topic"
+              rows={3}
+              maxLength={selectedClaim !== undefined ? 400 : 500}
+              value={topic}
+              onChange={(event) => {
+                setRetryClaim(null)
+                setFindings([])
+                setCorrection('')
+                setError('')
+                setTopic(event.target.value)
+                setSelectedClaim(selectedClaim !== undefined ? event.target.value : undefined)
+              }}
+              disabled={busy || ideasBusy || Boolean(result && !submitted)}
+              placeholder="For example: Black communities in Oakland"
+              required
+            />
+            <button
+              type="submit"
+              disabled={busy || ideasBusy || !topic.trim() || Boolean(result && !submitted)}
+            >
+              Generate post
+            </button>
+          </form>
+        </section>
+      </div>
+      <p className="progress" role="status" aria-live="polite">
         {progress}
       </p>
       {error && (
-        <div role="alert">
+        <div className="error-panel" role="alert">
           <p>{error}</p>
+          {findings.length > 0 && (
+            <ul className="audit-list">
+              {findings.map((finding) => (
+                <li key={`${finding.part}-${finding.status}-${finding.quote || finding.detail}`}>
+                  <strong>
+                    {finding.status}: {finding.part}
+                  </strong>
+                  <p>{finding.detail}</p>
+                  {finding.quote && <blockquote>{finding.quote}</blockquote>}
+                </li>
+              ))}
+            </ul>
+          )}
+          {correction && !result && (
+            <div className="correction-panel">
+              <label htmlFor="corrected-claim">Suggested correction · edit before checking</label>
+              <textarea
+                id="corrected-claim"
+                rows={3}
+                maxLength={280}
+                value={correction}
+                onChange={(event) => setCorrection(event.target.value)}
+                disabled={busy || ideasBusy}
+              />
+              <button
+                disabled={busy || ideasBusy || !correction.trim()}
+                onClick={() => {
+                  setTopic(correction.trim())
+                  setSelectedClaim(correction.trim())
+                  void generate(false, correction.trim())
+                }}
+              >
+                Apply correction & recheck
+              </button>
+              <p>The revision is checked against sources again before a card is created.</p>
+            </div>
+          )}
           {retryClaim && !result && (
             <div>
               <p>
@@ -334,18 +392,33 @@ export function GeneratePostTool() {
         </p>
       )}
       {result && (
-        <div style={{display: 'flex', flexWrap: 'wrap', gap: 32, marginTop: 24}}>
-          <div style={{maxWidth: '100%', overflow: 'auto'}}>
+        <div className="result-panel">
+          <div className="card-preview">
             <img
               src={`data:image/png;base64,${result.cardPng}`}
               alt={result.factText}
               width={540}
               height={540}
-              style={{maxWidth: '100%', height: 'auto'}}
             />
             <p>Template-rendered PNG · 1080 × 1080</p>
           </div>
-          <div style={{maxWidth: 420}}>
+          <div className="result-copy">
+            <span className="eyebrow">Verified · Ready for your review</span>
+            {result.verification && (
+              <details>
+                <summary>View claim audit</summary>
+                <ul className="audit-list">
+                  {result.verification.findings.map((finding) => (
+                    <li
+                      key={`${finding.part}-${finding.status}-${finding.quote || finding.detail}`}
+                    >
+                      <strong>{finding.part}</strong>
+                      <p>{finding.detail}</p>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
             <h2>Facebook caption</h2>
             <p>{result.caption}</p>
             <h2>Source</h2>
@@ -356,6 +429,6 @@ export function GeneratePostTool() {
           </div>
         </div>
       )}
-    </div>
+    </GeneratorPage>
   )
 }

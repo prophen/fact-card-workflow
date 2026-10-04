@@ -172,6 +172,10 @@ export async function POST(request: Request) {
       });
       return reply(request, { claims }, 200);
     }
+    const previousFacts = await client.fetch<string[]>(
+      '*[_type == "post" && status in ["approved", "published"] && !(_id in path("versions.**"))] | order(_updatedAt desc)[0...100].factText',
+      {}, {perspective: 'drafts'},
+    );
     const post = await generatePost(
       topic,
       {
@@ -183,6 +187,7 @@ export async function POST(request: Request) {
       undefined,
       candidateClaim,
       retrySources,
+      previousFacts,
     );
     const png = await renderCard(post.factText);
     return reply(request, { ...post, cardPng: png.toString("base64") }, 200);
@@ -194,6 +199,8 @@ export async function POST(request: Request) {
           error: error.message,
           code: error.code,
           candidateClaim: error.candidateClaim,
+          findings: error.findings,
+          suggestedCorrection: error.suggestedCorrection,
         },
         422,
       );

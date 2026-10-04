@@ -1,160 +1,253 @@
 import {expect, test, vi} from 'vitest'
-import {generatePost} from '../../web/src/lib/generate-post'
+import {generatePost, SourceVerificationError} from '../../shared/generate-post'
 
 const settings = {openaiKey: 'test-only', exaKey: 'test-only', model: 'test-model'}
-const quote = 'In 1900 a Black community established a school in California.'
-const checked = {
-  verdict: 'supported',
-  sourceIndex: 0,
-  quote,
-  factText: quote,
-  caption: 'This community created a school. What would you like to learn?',
+const claim = 'A Black community established a school in California in 1900.'
+const sources = {
+  results: [{title: 'Archive', url: 'https://example.org/archive', highlights: [claim]}],
 }
-function mockFetch(result: Record<string, unknown>) {
-  const responses = [
-    {choices: [{message: {content: JSON.stringify({claim: quote})}}]},
+const supported = {
+  findings: [
     {
-      results: [
-        {title: 'Historical archive', url: 'https://example.org/archive', highlights: [quote]},
-      ],
+      part: claim,
+      status: 'supported',
+      detail: 'The archive supports this.',
+      sourceIndex: 0,
+      quote: claim,
     },
-    {choices: [{message: {content: JSON.stringify(result)}}]},
-  ]
-  return vi.fn(async () => Response.json(responses.shift())) as unknown as typeof fetch
+  ],
 }
-test('uses the actual Exa source and appends a caption question', async () => {
-  const fetch = mockFetch(checked)
-  const result = await generatePost('California schools', settings, fetch)
-  expect(result.source.url).toBe('https://example.org/archive')
-  expect(result.source.citation).toContain(quote)
-  expect(result.caption.endsWith('?')).toBe(true)
-  expect(fetch).toHaveBeenCalledTimes(3)
+const caption = {
+  caption: 'The community established a school.',
+  cta: 'What would you like to learn?',
+}
+const completion = (content: unknown) => ({
+  choices: [{message: {content: JSON.stringify(content)}}],
 })
-test('does not accept an unsupported fact', async () => {
-  await expect(
-    generatePost('schools', settings, mockFetch({verdict: 'unsupported'})),
-  ).rejects.toThrow('could not be supported')
-})
-test('does not accept a fabricated quote or source index', async () => {
-  await expect(
-    generatePost('schools', settings, mockFetch({...checked, quote: 'Invented evidence'})),
-  ).rejects.toThrow('could not be supported')
-  await expect(
-    generatePost('schools', settings, mockFetch({...checked, sourceIndex: 20})),
-  ).rejects.toThrow('could not be supported')
-})
-test('rejects captions without an engagement question and oversized card facts', async () => {
-  await expect(
-    generatePost('schools', settings, mockFetch({...checked, caption: 'No question.'})),
-  ).rejects.toThrow('could not be supported')
-  await expect(
-    generatePost('schools', settings, mockFetch({...checked, factText: 'x'.repeat(281)})),
-  ).rejects.toThrow('could not be supported')
-})
-test('surfaces provider failure instead of substituting placeholder content', async () => {
-  const fetch = vi.fn(
-    async () => new Response(null, {status: 429}),
-  ) as unknown as typeof globalThis.fetch
-  await expect(generatePost('schools', settings, fetch)).rejects.toThrow('429')
-})
+function requestFor(...responses: unknown[]) {
+  return vi.fn(async (_url: string | URL | Request, _options?: RequestInit) => {
+    if (!responses.length) throw new Error('Unexpected provider call')
+    return Response.json(responses.shift())
+  })
+}
 
-test('passes revision feedback to both drafting and evidence checking', async () => {
-  const fetch = mockFetch(checked)
-  const revision = {note: 'Use a primary source and a shorter caption', previousFact: quote}
-  await generatePost('California schools', settings, fetch, revision)
-  const calls = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls
-  const draft = JSON.parse(calls[0][1].body)
-  const verification = JSON.parse(calls[2][1].body)
-  expect(JSON.parse(draft.messages[1].content).revision).toEqual(revision)
-  expect(JSON.parse(verification.messages[1].content).revision).toEqual(revision)
-})
-
-test('verifies the selected idea without replacing it with another generated candidate', async () => {
-  const responses = [
-    {
-      results: [
-        {title: 'Historical archive', url: 'https://example.org/archive', highlights: [quote]},
-      ],
-    },
-    {choices: [{message: {content: JSON.stringify(checked)}}]},
-  ]
-  const request = vi.fn(async () => Response.json(responses.shift()))
-  const result = await generatePost('California schools', settings, request, undefined, quote)
-  expect(request).toHaveBeenCalledTimes(2)
-  const calls = request.mock.calls as unknown as [string, RequestInit][]
-  expect(calls[0][0]).toBe('https://api.exa.ai/search')
-  expect(JSON.parse(calls[0][1].body as string).query).toBe(quote)
-  expect(JSON.parse(JSON.parse(calls[1][1].body as string).messages[1].content).candidate).toBe(
-    quote,
+test('drafts, audits and separately captions a supported fact', async () => {
+  const request = requestFor(
+    completion({claim}),
+    sources,
+    completion(supported),
+    completion(caption),
   )
-  expect(result.source.citation).toContain(quote)
-})
-test('selected ideas still require supporting source evidence', async () => {
-  const responses = [
-    {results: [{title: 'Archive', url: 'https://example.org', highlights: [quote]}]},
-    {choices: [{message: {content: '{"verdict":"unsupported"}'}}]},
-  ]
-  await expect(
-    generatePost(
-      'history',
-      settings,
-      async () => Response.json(responses.shift()),
-      undefined,
-      'An unverified idea.',
-    ),
-  ).rejects.toThrow('could not be supported')
+  const post = await generatePost('schools', settings, request)
+  expect(post.factText).toBe(claim)
+  expect(post.caption.endsWith('?')).toBe(true)
+  expect(post.source.citation).toContain(claim)
+  expect(post.source.url).toBe('https://example.org/archive')
+  expect(post.verification?.findings).toEqual(supported.findings)
+  expect(request).toHaveBeenCalledTimes(4)
 })
 
-test('failed verification returns the exact candidate for retry', async () => {
-  const {SourceVerificationError} = await import('../../shared/generate-post')
-  try {
-    await generatePost('schools', settings, mockFetch({verdict: 'unsupported'}))
-    throw new Error('Expected verification failure')
-  } catch (error) {
-    expect(error).toBeInstanceOf(SourceVerificationError)
-    expect((error as InstanceType<typeof SourceVerificationError>).candidateClaim).toBe(quote)
+test('selected claims skip drafting and preserve the exact audited wording', async () => {
+  const request = requestFor(sources, completion(supported), completion(caption))
+  const post = await generatePost('schools', settings, request, undefined, claim)
+  expect(post.factText).toBe(claim)
+  expect(request.mock.calls[0][0]).toBe('https://api.exa.ai/search')
+  expect(request).toHaveBeenCalledTimes(3)
+})
+
+test('supports a claim with different parts backed by different retrieved sources', async () => {
+  const request = requestFor(
+    {
+      results: [
+        {
+          title: 'School archive',
+          url: 'https://example.org/school',
+          highlights: ['A Black community established a school in California.'],
+        },
+        {
+          title: 'Timeline',
+          url: 'https://example.org/date',
+          highlights: ['The school opened in 1900.'],
+        },
+      ],
+    },
+    completion({
+      findings: [
+        {
+          part: 'community established a school',
+          status: 'supported',
+          detail: 'School archive',
+          sourceIndex: 0,
+          quote: 'A Black community established a school in California.',
+        },
+        {
+          part: 'in 1900',
+          status: 'supported',
+          detail: 'Timeline',
+          sourceIndex: 1,
+          quote: 'The school opened in 1900.',
+        },
+      ],
+    }),
+    completion(caption),
+  )
+  const post = await generatePost('schools', settings, request, undefined, claim)
+  expect(post.source.citation).toContain('https://example.org/school')
+  expect(post.source.citation).toContain('https://example.org/date')
+})
+
+test('mixed claims return findings and a correction without making a card', async () => {
+  const candidate = claim + ' It was the first in the state.'
+  const request = requestFor(
+    sources,
+    completion({
+      findings: [
+        ...supported.findings,
+        {
+          part: 'It was the first in the state.',
+          status: 'unsupported',
+          detail: 'No excerpt supports first.',
+        },
+      ],
+    }),
+    completion({fact: claim}),
+  )
+  await expect(
+    generatePost('schools', settings, request, undefined, candidate),
+  ).rejects.toMatchObject({
+    code: 'SOURCE_VERIFICATION_FAILED',
+    candidateClaim: candidate,
+    suggestedCorrection: claim,
+    findings: expect.arrayContaining([expect.objectContaining({status: 'unsupported'})]),
+  })
+  expect(request).toHaveBeenCalledTimes(3)
+})
+
+test('a corrected claim must pass a fresh source search and audit', async () => {
+  const request = requestFor(
+    sources,
+    completion({
+      findings: [{part: claim, status: 'unsupported', detail: 'Insufficient evidence.'}],
+    }),
+  )
+  await expect(generatePost('schools', settings, request, undefined, claim)).rejects.toBeInstanceOf(
+    SourceVerificationError,
+  )
+  expect(request).toHaveBeenCalledTimes(2)
+})
+
+test('fabricated quotes and invalid source indexes cannot pass the audit', async () => {
+  for (const change of [{quote: 'Invented evidence'}, {sourceIndex: 20}]) {
+    const request = requestFor(
+      sources,
+      completion({findings: [{...supported.findings[0], ...change}]}),
+    )
+    await expect(
+      generatePost('schools', settings, request, undefined, claim),
+    ).rejects.toMatchObject({findings: [expect.objectContaining({status: 'unsupported'})]})
   }
 })
 
-test('source retry preserves the claim and verifies against longer retrieved source text', async () => {
-  const responses = [
+test('empty or malformed audits fail closed', async () => {
+  for (const audit of [{findings: []}, {}, {findings: [null]}]) {
+    const request = requestFor(sources, completion(audit))
+    await expect(
+      generatePost('schools', settings, request, undefined, claim),
+    ).rejects.toBeInstanceOf(SourceVerificationError)
+  }
+})
+
+test('longer source retries still use exact quotes', async () => {
+  const request = requestFor(
     {
       results: [
         {
           title: 'Archive',
           url: 'https://example.org/archive',
-          text: `Historical context. ${quote} Further context.`,
+          text: `Context. ${claim} More context.`,
         },
       ],
     },
-    {choices: [{message: {content: JSON.stringify(checked)}}]},
-  ]
-  const request = vi.fn(async () => Response.json(responses.shift()))
-  const result = await generatePost('schools', settings, request, undefined, quote, true)
-  const calls = request.mock.calls as unknown as [string, RequestInit][]
-  const search = JSON.parse(calls[0][1].body as string)
-  expect(search).toMatchObject({
-    query: quote,
+    completion(supported),
+    completion(caption),
+  )
+  await generatePost('schools', settings, request, undefined, claim, true)
+  expect(JSON.parse(request.mock.calls[0][1]!.body as string)).toMatchObject({
+    query: claim,
     numResults: 10,
     contents: {text: {maxCharacters: 8000}},
   })
-  expect(request).toHaveBeenCalledTimes(2)
-  expect(result.source.citation).toContain(quote)
 })
 
-test('broader source retries still reject invented evidence', async () => {
-  const responses = [
-    {results: [{title: 'Archive', url: 'https://example.org/archive', text: quote}]},
-    {choices: [{message: {content: JSON.stringify({...checked, quote: 'Invented evidence'})}}]},
-  ]
+test('history contradictions block generation before caption creation', async () => {
+  const request = requestFor(
+    sources,
+    completion(supported),
+    completion({
+      conflicts: [{fact: 'The school opened in 1901.', reason: 'Different opening dates.'}],
+    }),
+  )
+  await expect(
+    generatePost('schools', settings, request, undefined, claim, false, [
+      'The school opened in 1901.',
+    ]),
+  ).rejects.toThrow('conflicts with a previously approved post')
+  expect(request).toHaveBeenCalledTimes(3)
+})
+
+test('history wording differences can pass and produce a caption', async () => {
+  const request = requestFor(
+    sources,
+    completion(supported),
+    completion({conflicts: []}),
+    completion(caption),
+  )
+  expect(
+    (await generatePost('schools', settings, request, undefined, claim, false, [claim])).factText,
+  ).toBe(claim)
+})
+
+test('revision feedback reaches drafting, audit and caption generation', async () => {
+  const revision = {note: 'Use a shorter caption', previousFact: claim}
+  const request = requestFor(
+    completion({claim}),
+    sources,
+    completion(supported),
+    completion(caption),
+  )
+  await generatePost('schools', settings, request, revision)
+  for (const index of [0, 2, 3]) {
+    const body = JSON.parse(request.mock.calls[index][1]!.body as string)
+    expect(JSON.parse(body.messages[1].content).revision).toEqual(revision)
+  }
+})
+
+test('missing sources and provider errors do not substitute placeholder content', async () => {
+  await expect(
+    generatePost('schools', settings, requestFor({results: []}), undefined, claim),
+  ).rejects.toThrow('No source evidence')
+  await expect(
+    generatePost('schools', settings, async () => new Response(null, {status: 429})),
+  ).rejects.toThrow('429')
+})
+
+test('an invalid caption and oversized card fact are rejected', async () => {
   await expect(
     generatePost(
       'schools',
       settings,
-      async () => Response.json(responses.shift()),
+      requestFor(sources, completion(supported), completion({...caption, cta: 'No question.'})),
       undefined,
-      quote,
-      true,
+      claim,
     ),
-  ).rejects.toThrow('could not be supported')
+  ).rejects.toThrow('incomplete caption')
+  await expect(
+    generatePost(
+      'schools',
+      settings,
+      requestFor(sources, completion(supported)),
+      undefined,
+      'x'.repeat(281),
+    ),
+  ).rejects.toThrow('Shorten this verified claim')
 })
