@@ -42,7 +42,7 @@ The linked Exa sources stay visible, with excerpt previews and publication dates
 
 **Say:**
 
-“When part of a claim needs changing, the original generator’s correction prompt changes the unsupported or contradicted parts and keeps the supported wording close to the original.
+“If part of a claim isn’t supported or conflicts with the sources, the app suggests a correction while keeping the supported details.
 
 Applying this suggestion uses the findings already on screen. It doesn’t run another search or audit. I can inspect the corrected fact before creating the card, and it still needs my editorial approval.”
 
@@ -76,7 +76,7 @@ Show **Generating**, then the revised caption and return to **In review**.
 
 If I reject it, I leave feedback and a background Sanity Function handles the revision. Here I’m changing only the engagement question, so it keeps the fact, source, and card image. An image-only request rerenders the existing fact, while a factual change goes through source verification.
 
-The revised post returns to review on the same document. It needs my approval again.”
+The app updates the existing post and sends it back to review. I can then approve it or request another revision.”
 
 **If regeneration fails:** Show the error and **Retry generating replacement**, or record a later successful run. Don’t imply the workflow succeeded while it is still generating.
 

@@ -8,7 +8,8 @@ afterEach(() => {
   vi.unstubAllGlobals()
   vi.unstubAllEnvs()
 })
-function setup() {
+function setup(conflictOnFirstSave = false) {
+  let conflictInjected = false
   let post: Record<string, unknown> = {
     _id: 'drafts.card',
     _rev: 'original',
@@ -40,6 +41,10 @@ function setup() {
         return builder
       },
       async commit() {
+        if (guard && conflictOnFirstSave && !conflictInjected) {
+          conflictInjected = true
+          post = {...post, status: 'generating', _rev: 'status-update'}
+        }
         if (guard && guard !== post._rev)
           throw Object.assign(Error('Revision conflict'), {statusCode: 409})
         post = {...post, ...changes, _rev: 'updated'}
@@ -187,4 +192,24 @@ test('reviewer edits during generation are preserved and the replacement stops',
   ).rejects.toThrow('post was edited')
   expect(state.getPost().caption).toBe('A reviewer edit. What do you think?')
   expect(state.getPost().regenerationKey).toBeUndefined()
+})
+
+test('a status-only conflict at commit retries the save without repeating provider calls', async () => {
+  const state = setup(true)
+  vi.stubEnv('OPENAI_API_KEY', 'test-only')
+  const provider = vi.fn(async () =>
+    Response.json({
+      choices: [
+        {message: {content: JSON.stringify({caption: 'The same fact. Which detail stands out?'})}},
+      ],
+    }),
+  )
+  vi.stubGlobal('fetch', provider)
+  await regenerationHandler(state.client)(
+    {subject: 'dataset:ta2gi825:production:card', revisionNote: 'Change the caption'},
+    state.ctx,
+  )
+  expect(provider).toHaveBeenCalledTimes(1)
+  expect(state.getPost().regenerationKey).toBe('effect-1')
+  expect(state.getPost().generationError).toBeUndefined()
 })

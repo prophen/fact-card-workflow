@@ -36,6 +36,7 @@ export function displayCitation(citation: string): string {
 /** Turn the compact source bibliography into clickable Markdown links. */
 export function citationMarkdown(citation: string): string {
   return citation
+    .replace(/[ \t]+(#{1,6})[ \t]+/g, "\n\n$1 ")
     .split(/\n\s*\n/)
     .map((entry) => {
       if (entry.length > 300)
