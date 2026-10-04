@@ -40,7 +40,8 @@ function setup() {
         return builder
       },
       async commit() {
-        if (guard && guard !== post._rev) throw Error('Revision conflict')
+        if (guard && guard !== post._rev)
+          throw Object.assign(Error('Revision conflict'), {statusCode: 409})
         post = {...post, ...changes, _rev: 'updated'}
         for (const key of removals) delete post[key]
         return post
@@ -55,7 +56,17 @@ function setup() {
     assets: {upload},
   } as unknown as SanityClient
   const ctx = {instanceId: 'workflow', effectKey: 'effect-1'} as Parameters<EffectHandler>[1]
-  return {client, ctx, original, getPost: () => post, upload, fetch}
+  return {
+    client,
+    ctx,
+    original,
+    getPost: () => post,
+    edit: (changes: Record<string, unknown>) => {
+      post = {...post, ...changes, _rev: 'concurrent'}
+    },
+    upload,
+    fetch,
+  }
 }
 
 test('caption-only feedback preserves the fact, citation, and image without Exa or uploads', async () => {
@@ -79,7 +90,8 @@ test('caption-only feedback preserves the fact, citation, and image without Exa 
   await regenerationHandler(state.client)(
     {
       subject: 'dataset:ta2gi825:production:card',
-      revisionNote: 'Change the question in the Facebook caption',
+      revisionNote:
+        'Change the question in the Facebook caption. Keep the fact, source, and card image unchanged.',
     },
     state.ctx,
   )
@@ -121,4 +133,58 @@ test('factual, source, and ambiguous feedback uses full verification', () => {
   ])
     expect(revisionScope(note)).toBe('content')
   expect(revisionScope('Change the caption and image')).toBe('presentation')
+})
+
+test('background status changes during generation do not fail the first replacement', async () => {
+  const state = setup()
+  vi.stubEnv('OPENAI_API_KEY', 'test-only')
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => {
+      state.edit({status: 'generating'})
+      return Response.json({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({caption: 'The same fact. What interests you most?'}),
+            },
+          },
+        ],
+      })
+    }),
+  )
+  await regenerationHandler(state.client)(
+    {subject: 'dataset:ta2gi825:production:card', revisionNote: 'Change the caption'},
+    state.ctx,
+  )
+  expect(state.getPost().regenerationKey).toBe('effect-1')
+  expect(state.getPost().caption).toContain('What interests')
+})
+
+test('reviewer edits during generation are preserved and the replacement stops', async () => {
+  const state = setup()
+  vi.stubEnv('OPENAI_API_KEY', 'test-only')
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => {
+      state.edit({caption: 'A reviewer edit. What do you think?'})
+      return Response.json({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({caption: 'The same fact. What interests you most?'}),
+            },
+          },
+        ],
+      })
+    }),
+  )
+  await expect(
+    regenerationHandler(state.client)(
+      {subject: 'dataset:ta2gi825:production:card', revisionNote: 'Change the caption'},
+      state.ctx,
+    ),
+  ).rejects.toThrow('post was edited')
+  expect(state.getPost().caption).toBe('A reviewer edit. What do you think?')
+  expect(state.getPost().regenerationKey).toBeUndefined()
 })

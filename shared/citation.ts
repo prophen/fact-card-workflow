@@ -38,7 +38,9 @@ export function citationMarkdown(citation: string): string {
   return citation
     .split(/\n\s*\n/)
     .map((entry) => {
-      if (entry.length > 300 || /\[[^\]]+\]\(/.test(entry)) return entry;
+      if (entry.length > 300)
+        return entry.replace(/[ \t]+(#{1,6})[ \t]+/g, "\n\n$1 ");
+      if (/\[[^\]]+\]\(/.test(entry)) return entry;
       const match = entry.match(/^([^\n]+) \((https?:\/\/[^\s)]+)\)$/);
       return match
         ? `[${match[1].replace(/[\[\]]/g, "")}](${match[2]})`
