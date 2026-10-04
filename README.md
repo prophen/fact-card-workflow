@@ -54,7 +54,9 @@ is insufficient, **Retry source checking** keeps the same candidate and searches
 more sources with longer page text while retaining the original excerpts. The tool audits each checkable part across the retrieved sources, following the
 original CBS Post Generator's audit and correction flow. When a claim is mixed or
 contradicted, it shows the findings and offers an editable suggested correction
-where evidence allows. **Apply correction & recheck** checks the revision against the same evidence that produced the suggestion; the suggestion alone cannot create a post. Saved source excerpts are signed by the server,
+where evidence allows. **Accept rewrite & create card** uses a rewrite already checked against the saved
+evidence, with no new search or audit on acceptance. Edited or unchecked suggestions
+use **Check rewrite & create card** before submission. Saved source excerpts are signed by the server,
 bound to your Studio user, and available for 30 minutes; editing the main claim
 starts a new source check. Successful claims are
 cross-checked against up to 100 recent approved/published Sanity posts (including

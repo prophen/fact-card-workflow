@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import type { Evidence } from "./generate-post";
+import type { Evidence, GeneratedPost } from "./generate-post";
 
 // Stateless, user-bound proof that these excerpts came from our server's search.
 // Studio cannot supply invented evidence. No API key is included in the token.
@@ -8,9 +8,15 @@ export function signSourceContext(
   user: string,
   key: string,
   now = Date.now(),
+  preparedRewrite?: GeneratedPost,
 ) {
   const payload = Buffer.from(
-    JSON.stringify({ sources, user, expires: now + 30 * 60_000 }),
+    JSON.stringify({
+      sources,
+      preparedRewrite,
+      user,
+      expires: now + 30 * 60_000,
+    }),
   ).toString("base64url");
   const signature = createHmac("sha256", key)
     .update(`cbs-source-context:${payload}`)
@@ -18,12 +24,12 @@ export function signSourceContext(
   return `${payload}.${signature}`;
 }
 
-export function readSourceContext(
+export function readRevisionContext(
   token: unknown,
   user: string,
   key: string,
   now = Date.now(),
-): Evidence[] {
+): { sources: Evidence[]; preparedRewrite?: GeneratedPost } {
   if (typeof token !== "string" || token.length > 400_000)
     throw new Error("Invalid source context.");
   const [payload, signature, extra] = token.split(".");
@@ -49,5 +55,14 @@ export function readSourceContext(
       "Your saved sources expired. Choose the claim again to run a fresh source check.",
     );
   }
-  return data.sources;
+  return { sources: data.sources, preparedRewrite: data.preparedRewrite };
+}
+
+export function readSourceContext(
+  token: unknown,
+  user: string,
+  key: string,
+  now = Date.now(),
+): Evidence[] {
+  return readRevisionContext(token, user, key, now).sources;
 }

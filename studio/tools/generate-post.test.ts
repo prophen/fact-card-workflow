@@ -111,6 +111,8 @@ test('mixed claims return findings and a correction without making a card', asyn
       ],
     }),
     completion({fact: claim}),
+    completion(supported),
+    completion(caption),
   )
   await expect(
     generatePost('schools', settings, request, undefined, candidate),
@@ -118,9 +120,10 @@ test('mixed claims return findings and a correction without making a card', asyn
     code: 'SOURCE_VERIFICATION_FAILED',
     candidateClaim: candidate,
     suggestedCorrection: claim,
+    preparedRewrite: expect.objectContaining({factText: claim}),
     findings: expect.arrayContaining([expect.objectContaining({status: 'unsupported'})]),
   })
-  expect(request).toHaveBeenCalledTimes(3)
+  expect(request).toHaveBeenCalledTimes(5)
 })
 
 test('a corrected claim must pass a fresh source search and audit', async () => {
@@ -403,4 +406,27 @@ test('a real quote is attributed to its retrieved source despite a wrong model s
     expect(post.verification?.findings[0].sourceIndex).toBe(0)
     expect(post.source.url).toBe('https://example.org/archive')
   }
+})
+
+test('an unchecked correction is not offered for instant acceptance and cannot recurse', async () => {
+  const candidate = claim + ' It was the first in the state.'
+  const request = requestFor(
+    sources,
+    completion({
+      findings: [
+        ...supported.findings,
+        {part: 'It was the first in the state.', status: 'unsupported', detail: 'No evidence.'},
+      ],
+    }),
+    completion({fact: claim}),
+    completion({findings: [{...supported.findings[0], status: 'unsupported'}]}),
+  )
+  try {
+    await generatePost('schools', settings, request, undefined, candidate)
+    throw new Error('Expected failure')
+  } catch (error) {
+    expect(error).toBeInstanceOf(SourceVerificationError)
+    expect((error as SourceVerificationError).preparedRewrite).toBeUndefined()
+  }
+  expect(request).toHaveBeenCalledTimes(4)
 })

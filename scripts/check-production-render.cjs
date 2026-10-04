@@ -1,7 +1,7 @@
 const assert=require('node:assert/strict');
 const root=require('node:path').resolve(__dirname, '..');
 const fact='Biddy Mason arrived in California in 1851.';
-let searches=0;
+let searches=0;let providerRequests=0;
 process.chdir(root+'/web');
 process.env.OPENAI_API_KEY='test-only';process.env.EXA_API_KEY='test-only';
 global.fetch=async(input,options={})=>{
@@ -11,6 +11,7 @@ global.fetch=async(input,options={})=>{
  if(url.includes('/data/query/'))return Response.json({result:[]});
  if(url.includes('api.exa.ai')) { searches++; return Response.json({results:[{title:'Test archive',url:'https://example.org',highlights:[fact]}]}); }
  if(url.includes('api.openai.com')) {
+  providerRequests++;
   const isAudit=body.messages[0].content.includes('skeptical fact-checker');
   const input=JSON.parse(body.messages[1].content);
   const isFix=body.messages[0].content.includes('You are an editor');
@@ -28,7 +29,12 @@ global.fetch=async(input,options={})=>{
  const failed=await post({topic:fact,candidateClaim:`${fact} It was the first in California.`});
  const revision=await failed.json();assert.equal(failed.status,422,revision.error);
  assert.ok(revision.sourceContext);assert.equal(revision.suggestedCorrection,fact);
- const response=await post({topic:fact,candidateClaim:revision.suggestedCorrection,sourceContext:revision.sourceContext});
+ assert.equal(revision.rewriteReady,true);
+ const checkedCalls=providerRequests;
+ const changed=await post({topic:fact,candidateClaim:'Edited text.',sourceContext:revision.sourceContext,acceptRewrite:true});
+ assert.equal(changed.status,400,'Edited rewrites cannot use the instant-accept path.');
+ const response=await post({topic:fact,candidateClaim:revision.suggestedCorrection,sourceContext:revision.sourceContext,acceptRewrite:true});
+ assert.equal(providerRequests,checkedCalls,'Accepting the checked rewrite must not run another audit or caption generation.');
  const data=await response.json();assert.equal(response.status,200,data.error);
  assert.equal(searches,1,'Applying the correction must reuse the original evidence without another search.');
  const tampered=await post({topic:fact,candidateClaim:fact,sourceContext:revision.sourceContext+'changed'});

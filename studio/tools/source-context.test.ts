@@ -1,5 +1,9 @@
 import {expect, test} from 'vitest'
-import {readSourceContext, signSourceContext} from '../../shared/source-context'
+import {
+  readSourceContext,
+  readRevisionContext,
+  signSourceContext,
+} from '../../shared/source-context'
 const evidence = [
   {title: 'Archive', url: 'https://example.org', highlights: ['Retrieved excerpt.']},
 ]
@@ -23,4 +27,14 @@ test('evidence contexts expire and cannot be transferred between users', () => {
   const token = signSourceContext(evidence, 'reviewer', key, 1000)
   expect(() => readSourceContext(token, 'another-user', key, 2000)).toThrow('expired')
   expect(() => readSourceContext(token, 'reviewer', key, 1000 + 30 * 60_000)).toThrow('expired')
+})
+
+test('the prepared rewrite is preserved with the signed evidence', () => {
+  const prepared = {
+    factText: 'Verified rewrite.',
+    caption: 'Verified rewrite. What do you think?',
+    source: {citation: 'Archive.', url: 'https://example.org'},
+  }
+  const token = signSourceContext(evidence, 'reviewer', key, 1000, prepared)
+  expect(readRevisionContext(token, 'reviewer', key, 2000).preparedRewrite).toEqual(prepared)
 })

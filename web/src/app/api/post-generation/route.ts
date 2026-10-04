@@ -1,12 +1,12 @@
 import { createClient } from "next-sanity";
-import {readSourceContext, signSourceContext} from "../../../../../shared/source-context";
-import { SourceVerificationError, type Evidence } from "../../../../../shared/generate-post";
+import {readRevisionContext, signSourceContext} from "../../../../../shared/source-context";
+import { SourceVerificationError, type Evidence, type GeneratedPost } from "../../../../../shared/generate-post";
 import { generatePost } from "@/lib/generate-post";
 import { generateIdeas } from "../../../../../shared/generate-ideas";
 import { renderCard } from "../../../../../shared/render-card";
 
 export const runtime = "nodejs";
-export const maxDuration = 180;
+export const maxDuration = 240;
 const active = new Set<string>();
 const lastRequest = new Map<string, number>();
 const origins = () =>
@@ -88,6 +88,8 @@ export async function POST(request: Request) {
   let candidateClaim: string | undefined;
   let retrySources = false;
   let sourceEvidence: Evidence[] = [];
+  let preparedRewrite: GeneratedPost | undefined;
+  let acceptRewrite = false;
   try {
     const body = await request.json();
     if (
@@ -111,7 +113,7 @@ export async function POST(request: Request) {
     candidateClaim = body.candidateClaim?.trim();
     if (body.sourceContext !== undefined) {
       if (!openaiKey || !candidateClaim) return reply(request, {error: "Choose a claim before reusing its sources."}, 400);
-      try { sourceEvidence = readSourceContext(body.sourceContext, user.id, openaiKey); }
+      try { const context = readRevisionContext(body.sourceContext, user.id, openaiKey); sourceEvidence = context.sources; preparedRewrite = context.preparedRewrite; }
       catch (error) { return reply(request, {error: error instanceof Error ? error.message : "Invalid source context."}, 400); }
     }
     if (
@@ -120,6 +122,9 @@ export async function POST(request: Request) {
     )
       return reply(request, { error: "Invalid source retry request." }, 400);
     retrySources = body.retrySources === true;
+    if (body.acceptRewrite !== undefined && typeof body.acceptRewrite !== "boolean") return reply(request, {error: "Invalid rewrite request."}, 400);
+    acceptRewrite = body.acceptRewrite === true;
+    if (acceptRewrite && (retrySources || !preparedRewrite || candidateClaim !== preparedRewrite.factText)) return reply(request, {error: "This rewrite changed or expired. Check the edited claim before creating a card."}, 400);
     if (retrySources && !candidateClaim)
       return reply(
         request,
@@ -183,7 +188,7 @@ export async function POST(request: Request) {
       '*[_type == "post" && status in ["approved", "published"] && !(_id in path("versions.**"))] | order(_updatedAt desc)[0...100].factText',
       {}, {perspective: 'drafts'},
     );
-    const post = await generatePost(
+    const post = acceptRewrite ? preparedRewrite! : await generatePost(
       topic,
       {
         openaiKey,
@@ -209,8 +214,9 @@ export async function POST(request: Request) {
           candidateClaim: error.candidateClaim,
           findings: error.findings,
           suggestedCorrection: error.suggestedCorrection,
+          rewriteReady: Boolean(error.preparedRewrite),
           sources: error.sources,
-          ...(error.sources.length && openaiKey ? {sourceContext: signSourceContext(error.sources, user.id, openaiKey)} : {}),
+          ...(error.sources.length && openaiKey ? {sourceContext: signSourceContext(error.sources, user.id, openaiKey, Date.now(), error.preparedRewrite)} : {}),
         },
         422,
       );

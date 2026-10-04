@@ -32,6 +32,7 @@ export function GeneratePostTool() {
   const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
   const [findings, setFindings] = useState<Finding[]>([])
+  const [preparedClaim, setPreparedClaim] = useState<string | null>(null)
   const [sourceContext, setSourceContext] = useState<string | undefined>()
   const [correction, setCorrection] = useState<string | null>(null)
   const [retryClaim, setRetryClaim] = useState<string | null>(null)
@@ -141,7 +142,7 @@ export function GeneratePostTool() {
     }
   }
 
-  async function generate(retrySources = false, correctedClaim?: string) {
+  async function generate(retrySources = false, correctedClaim?: string, acceptRewrite = false) {
     const candidateClaim =
       correctedClaim || (retrySources ? retryClaim || undefined : selectedClaim)
     setRetryClaim(null)
@@ -155,9 +156,11 @@ export function GeneratePostTool() {
     instanceId.current = null
     assetId.current = null
     setProgress(
-      retrySources
-        ? 'Adding more sources while keeping the earlier evidence…'
-        : 'Finding sources, auditing each part of the claim, and preparing the caption…',
+      acceptRewrite
+        ? 'Creating a card from the checked rewrite…'
+        : retrySources
+          ? 'Adding more sources while keeping the earlier evidence…'
+          : 'Finding sources, auditing each part of the claim, and preparing the caption…',
     )
     try {
       const token = client.config().token
@@ -170,14 +173,16 @@ export function GeneratePostTool() {
           topic,
           candidateClaim,
           retrySources,
+          acceptRewrite,
           sourceContext: candidateClaim ? sourceContext : undefined,
         }),
-        signal: AbortSignal.timeout(180000),
+        signal: AbortSignal.timeout(240000),
       })
       const data = await response.json()
       if (!response.ok) {
         if (response.status === 400) setSourceContext(undefined)
         if (data.code === 'SOURCE_VERIFICATION_FAILED' && typeof data.candidateClaim === 'string') {
+          setPreparedClaim(data.rewriteReady ? data.suggestedCorrection : null)
           setRetryClaim(data.candidateClaim)
           setSourceContext(typeof data.sourceContext === 'string' ? data.sourceContext : undefined)
           setFindings(Array.isArray(data.findings) ? data.findings : [])
@@ -364,13 +369,17 @@ export function GeneratePostTool() {
                   if (!revised) return
                   setTopic(revised)
                   setSelectedClaim(revised)
-                  void generate(false, revised)
+                  void generate(false, revised, preparedClaim === revised)
                 }}
               >
-                Apply correction & recheck
+                {preparedClaim === correction?.trim()
+                  ? 'Accept rewrite & create card'
+                  : 'Check rewrite & create card'}
               </button>
               <p>
-                The revision is checked against the same source excerpts before a card is created.
+                {preparedClaim === correction?.trim()
+                  ? 'This exact rewrite has already been checked against the saved sources. Accepting it creates the card for your review.'
+                  : 'This wording needs checking against the saved sources before a card is created.'}
               </p>
             </div>
           )}
