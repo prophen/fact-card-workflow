@@ -77,6 +77,9 @@ export const GeneratorPage = styled.div`
     border-radius: 16px;
     padding: 28px;
   }
+  > .step-panel {
+    margin-top: 24px;
+  }
   .step-panel > p {
     color: var(--muted);
     font-size: 14px;
