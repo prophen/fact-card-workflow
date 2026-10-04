@@ -28,6 +28,7 @@ export function GeneratePostTool() {
   const [result, setResult] = useState<GeneratedPost | null>(null)
   const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
+  const [retryClaim, setRetryClaim] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const draftId = useRef<string | null>(null)
@@ -134,7 +135,9 @@ export function GeneratePostTool() {
     }
   }
 
-  async function generate() {
+  async function generate(retrySources = false) {
+    const candidateClaim = retrySources ? retryClaim || undefined : selectedClaim
+    setRetryClaim(null)
     setBusy(true)
     setError('')
     setSubmitted(false)
@@ -142,7 +145,11 @@ export function GeneratePostTool() {
     draftId.current = null
     instanceId.current = null
     assetId.current = null
-    setProgress('Generating one fact and checking it against Exa source excerpts…')
+    setProgress(
+      retrySources
+        ? 'Checking the same claim against more sources and longer source text…'
+        : 'Generating one fact and checking it against Exa source excerpts…',
+    )
     try {
       const token = client.config().token
       if (!token)
@@ -150,11 +157,15 @@ export function GeneratePostTool() {
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {'Content-Type': 'application/json', Authorization: `Bearer ${token}`},
-        body: JSON.stringify({topic, candidateClaim: selectedClaim}),
+        body: JSON.stringify({topic, candidateClaim, retrySources}),
         signal: AbortSignal.timeout(180000),
       })
       const data = await response.json()
-      if (!response.ok) throw new Error(data.error || 'Generation failed.')
+      if (!response.ok) {
+        if (data.code === 'SOURCE_VERIFICATION_FAILED' && typeof data.candidateClaim === 'string')
+          setRetryClaim(data.candidateClaim)
+        throw new Error(data.error || 'Generation failed.')
+      }
       if (
         typeof data.cardPng !== 'string' ||
         typeof data.factText !== 'string' ||
@@ -166,6 +177,7 @@ export function GeneratePostTool() {
       setResult(data)
       await save(data)
     } catch (cause) {
+      if (retrySources && candidateClaim) setRetryClaim(candidateClaim)
       setError(cause instanceof Error ? cause.message : 'Could not reach the generation server.')
       setProgress('')
       setBusy(false)
@@ -231,6 +243,7 @@ export function GeneratePostTool() {
                   type="button"
                   disabled={busy || ideasBusy || Boolean(result && !submitted)}
                   onClick={() => {
+                    setRetryClaim(null)
                     setTopic(claim)
                     setSelectedClaim(claim)
                     setError('')
@@ -263,6 +276,8 @@ export function GeneratePostTool() {
           maxLength={500}
           value={topic}
           onChange={(event) => {
+            setRetryClaim(null)
+            setError('')
             setTopic(event.target.value)
             setSelectedClaim(undefined)
           }}
@@ -285,6 +300,20 @@ export function GeneratePostTool() {
       {error && (
         <div role="alert">
           <p>{error}</p>
+          {retryClaim && !result && (
+            <div>
+              <p>
+                <strong>Claim to recheck:</strong> {retryClaim}
+              </p>
+              <button disabled={busy || ideasBusy} onClick={() => void generate(true)}>
+                Retry source checking
+              </button>
+              <p>
+                This checks the same claim against more sources. It still needs evidence and your
+                approval.
+              </p>
+            </div>
+          )}
           {result && !submitted && (
             <button disabled={busy} onClick={() => void save(result)}>
               Retry saving this card

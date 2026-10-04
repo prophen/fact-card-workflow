@@ -104,3 +104,57 @@ test('selected ideas still require supporting source evidence', async () => {
     ),
   ).rejects.toThrow('could not be supported')
 })
+
+test('failed verification returns the exact candidate for retry', async () => {
+  const {SourceVerificationError} = await import('../../shared/generate-post')
+  try {
+    await generatePost('schools', settings, mockFetch({verdict: 'unsupported'}))
+    throw new Error('Expected verification failure')
+  } catch (error) {
+    expect(error).toBeInstanceOf(SourceVerificationError)
+    expect((error as InstanceType<typeof SourceVerificationError>).candidateClaim).toBe(quote)
+  }
+})
+
+test('source retry preserves the claim and verifies against longer retrieved source text', async () => {
+  const responses = [
+    {
+      results: [
+        {
+          title: 'Archive',
+          url: 'https://example.org/archive',
+          text: `Historical context. ${quote} Further context.`,
+        },
+      ],
+    },
+    {choices: [{message: {content: JSON.stringify(checked)}}]},
+  ]
+  const request = vi.fn(async () => Response.json(responses.shift()))
+  const result = await generatePost('schools', settings, request, undefined, quote, true)
+  const calls = request.mock.calls as unknown as [string, RequestInit][]
+  const search = JSON.parse(calls[0][1].body as string)
+  expect(search).toMatchObject({
+    query: quote,
+    numResults: 10,
+    contents: {text: {maxCharacters: 8000}},
+  })
+  expect(request).toHaveBeenCalledTimes(2)
+  expect(result.source.citation).toContain(quote)
+})
+
+test('broader source retries still reject invented evidence', async () => {
+  const responses = [
+    {results: [{title: 'Archive', url: 'https://example.org/archive', text: quote}]},
+    {choices: [{message: {content: JSON.stringify({...checked, quote: 'Invented evidence'})}}]},
+  ]
+  await expect(
+    generatePost(
+      'schools',
+      settings,
+      async () => Response.json(responses.shift()),
+      undefined,
+      quote,
+      true,
+    ),
+  ).rejects.toThrow('could not be supported')
+})

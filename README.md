@@ -48,7 +48,10 @@ Open Studio’s **Generate post** tab. Start with the prefilled core categories
 and click **Suggest five ideas**, then **Use this idea** to select a specific
 claim. Click **Generate post** to verify that exact idea and create the card.
 You can also type your own topic and generate directly. Suggestions are
-unverified candidates, not approved historical facts. The tool generates one candidate fact, searches Exa for
+unverified candidates, not approved historical facts. Suggestions focus on one
+concrete event or action rather than a broad biography or impact claim. If evidence
+is insufficient, **Retry source checking** keeps the same candidate and searches
+more sources with longer page text. Unsupported claims still cannot create a post. The tool generates one candidate fact, searches Exa for
 source excerpts, checks support, and writes a caption ending in a question. It
 renders the CBS black-and-gold template as a 1080 × 1080 PNG, uploads it to Sanity,
 creates a draft `post` and its workflow, and submits the card to **In review**.
@@ -62,8 +65,9 @@ No separate CBS rendering service is needed.
 
 For hosting, set `SANITY_STUDIO_GENERATION_API_URL` in the Studio environment to
 the web app's HTTPS URL, and `SANITY_STUDIO_ORIGINS` in the web server environment
-to the Studio origin (comma-separated if needed). Rebuild Studio after changing
-its URL. Never send your Sanity session token to an untrusted generator URL.
+to the Studio origin (comma-separated if needed). Restart the local Studio server after changing its generator URL; a browser
+refresh alone does not reload environment settings. Rebuild hosted Studio after
+changing its URL. Never send your Sanity session token to an untrusted generator URL.
 
 The verification and rendering approach is adapted from
 [cbs-post-generator](https://github.com/prophen/cbs-post-generator). Source quotes

@@ -1,4 +1,5 @@
 import { createClient } from "next-sanity";
+import { SourceVerificationError } from "../../../../../shared/generate-post";
 import { generatePost } from "@/lib/generate-post";
 import { generateIdeas } from "../../../../../shared/generate-ideas";
 import { renderCard } from "../../../../../shared/render-card";
@@ -35,6 +36,8 @@ export async function OPTIONS(request: Request) {
   });
 }
 export async function POST(request: Request) {
+  const startedAt = Date.now();
+  console.info("[post-generation] request received");
   const origin = request.headers.get("origin");
   if (origin && !origins().includes(origin))
     return reply(request, { error: "Studio origin is not allowed." }, 403);
@@ -51,21 +54,30 @@ export async function POST(request: Request) {
     apiVersion: "2026-10-03",
     useCdn: false,
     token: authorization.slice(7),
+    timeout: 10000,
+    maxRetries: 0,
   });
   let user: { id: string };
   try {
+    console.info("[post-generation] checking Studio access");
     user = await client.request({ url: "/users/me" });
     const member = await client.request<{ id?: string }>({
       url: `/projects/ta2gi825/users/${encodeURIComponent(user.id)}`,
     });
     if (!member.id) throw new Error("Project membership required");
   } catch {
+    console.warn("[post-generation] Studio access check failed", {
+      elapsedMs: Date.now() - startedAt,
+    });
     return reply(
       request,
       { error: "Your Sanity account cannot access this project." },
       403,
     );
   }
+  console.info("[post-generation] Studio access confirmed", {
+    elapsedMs: Date.now() - startedAt,
+  });
   if (!user?.id)
     return reply(request, { error: "Sanity authentication failed." }, 403);
   const openaiKey = process.env.OPENAI_API_KEY;
@@ -73,6 +85,7 @@ export async function POST(request: Request) {
   let topic: string;
   let mode: "ideas" | "post" = "post";
   let candidateClaim: string | undefined;
+  let retrySources = false;
   try {
     const body = await request.json();
     if (
@@ -94,6 +107,18 @@ export async function POST(request: Request) {
         400,
       );
     candidateClaim = body.candidateClaim?.trim();
+    if (
+      body.retrySources !== undefined &&
+      typeof body.retrySources !== "boolean"
+    )
+      return reply(request, { error: "Invalid source retry request." }, 400);
+    retrySources = body.retrySources === true;
+    if (retrySources && !candidateClaim)
+      return reply(
+        request,
+        { error: "Choose a claim before retrying its sources." },
+        400,
+      );
     if (
       typeof body.topic !== "string" ||
       !body.topic.trim() ||
@@ -119,7 +144,7 @@ export async function POST(request: Request) {
       },
       503,
     );
-  const requestKey = `${user.id}:${mode}`;
+  const requestKey = `${user.id}:${retrySources ? "source-retry" : mode}`;
   if (
     active.has(user.id) ||
     Date.now() - (lastRequest.get(requestKey) || 0) < 10000
@@ -135,10 +160,15 @@ export async function POST(request: Request) {
   active.add(user.id);
   lastRequest.set(requestKey, Date.now());
   try {
+    console.info("[post-generation] provider request started", { mode });
     if (mode === "ideas") {
       const claims = await generateIdeas(topic, {
         openaiKey,
         model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+      });
+      console.info("[post-generation] ideas ready", {
+        count: claims.length,
+        elapsedMs: Date.now() - startedAt,
       });
       return reply(request, { claims }, 200);
     }
@@ -152,10 +182,26 @@ export async function POST(request: Request) {
       fetch,
       undefined,
       candidateClaim,
+      retrySources,
     );
     const png = await renderCard(post.factText);
     return reply(request, { ...post, cardPng: png.toString("base64") }, 200);
   } catch (error) {
+    if (error instanceof SourceVerificationError)
+      return reply(
+        request,
+        {
+          error: error.message,
+          code: error.code,
+          candidateClaim: error.candidateClaim,
+        },
+        422,
+      );
+    console.error("[post-generation] provider request failed", {
+      mode,
+      elapsedMs: Date.now() - startedAt,
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
     return reply(
       request,
       {
