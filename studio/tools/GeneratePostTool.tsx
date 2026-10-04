@@ -269,17 +269,19 @@ export function GeneratePostTool() {
         }}
         style={{display: 'grid', gap: 12, maxWidth: 680}}
       >
-        <label htmlFor="generation-topic">Topic or core topics</label>
+        <label htmlFor="generation-topic">
+          {selectedClaim !== undefined ? 'Claim to verify' : 'Topic or core topics'}
+        </label>
         <textarea
           id="generation-topic"
           rows={3}
-          maxLength={500}
+          maxLength={selectedClaim !== undefined ? 400 : 500}
           value={topic}
           onChange={(event) => {
             setRetryClaim(null)
             setError('')
             setTopic(event.target.value)
-            setSelectedClaim(undefined)
+            setSelectedClaim(selectedClaim !== undefined ? event.target.value : undefined)
           }}
           disabled={busy || ideasBusy || Boolean(result && !submitted)}
           placeholder="For example: Black communities in Oakland"

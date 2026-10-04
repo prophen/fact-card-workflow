@@ -70,7 +70,7 @@ I initially had a manual drain command. I asked, “can we handle it automatical
 
 Next I asked, “I want to generate the posts within the app.” We added a custom **Generate post** tool in Studio, backed by a server endpoint in the web app.
 
-When choosing topics became difficult, I asked to bring in the topic-generation feature from CBS Post Generator. Studio now suggests five specific claim ideas from broad categories. I can choose one and send that exact idea to source checking. The suggestions are explicitly unverified.
+When choosing topics became difficult, I asked to bring in the topic-generation feature from CBS Post Generator. Studio now suggests five specific claim ideas from broad categories. I can choose one and send that exact idea to source checking. The suggestions are explicitly unverified. After an overly broad suggestion failed checking, I tightened them to one concrete event or action. A source-checking retry now keeps the same claim while requesting more sources and longer source text; it does not turn an unsupported claim into a post.
 
 OpenAI produces a candidate claim when I enter my own topic. Exa provides source excerpts. A second model pass checks the claim against those excerpts, and the code rejects a source quote that does not match the retrieved evidence. Supported output becomes a fact, citation, source URL, and caption ending in a question.
 
@@ -94,7 +94,7 @@ The frontend came from another practical request: “can we build a frontend tha
 
 Finally, I wanted Studio's **Publish** button to complete the workflow automatically. The button checks the current workflow's approval, and a background Function advances the approved workflow after a published document exists.
 
-The latest local checks passed 21 tests, Studio and web builds, and the changed-file lint checks. Tests exercise approval restrictions, rejection and retries, rendering, and publication synchronization. I also checked search, filtering, caption copying, mobile layouts, and an actual 1080 × 1080 image download in the browser. The deployed library also loaded successfully, and search, status filtering, caption copying, and image download worked there. The full authenticated workflow still needs its recorded walkthrough and final hosted smoke test.
+The latest local checks passed 24 tests, Studio and web builds, and the changed-file lint checks. Tests exercise approval restrictions, rejection and retries, rendering, and publication synchronization. I also checked search, filtering, caption copying, mobile layouts, and an actual 1080 × 1080 image download in the browser. The deployed library also loaded successfully, and search, status filtering, caption copying, and image download worked there. The full authenticated workflow still needs its recorded walkthrough and final hosted smoke test.
 
 ### What I would improve next
 
