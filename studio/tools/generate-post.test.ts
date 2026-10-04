@@ -247,7 +247,22 @@ test('an invalid caption and oversized card fact are rejected', async () => {
       settings,
       requestFor(sources, completion(supported)),
       undefined,
-      'x'.repeat(281),
+      claim.repeat(5),
     ),
   ).rejects.toThrow('Shorten this verified claim')
+})
+
+test('audit details not asserted in the candidate are excluded from correction findings', async () => {
+  const request = requestFor(
+    sources,
+    completion({
+      findings: [
+        ...supported.findings,
+        {part: 'An unrelated achievement', status: 'unsupported', detail: 'Not in this claim.'},
+      ],
+    }),
+    completion(caption),
+  )
+  const post = await generatePost('schools', settings, request, undefined, claim)
+  expect(post.verification?.findings).toHaveLength(1)
 })

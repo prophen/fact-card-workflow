@@ -32,7 +32,7 @@ export function GeneratePostTool() {
   const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
   const [findings, setFindings] = useState<Finding[]>([])
-  const [correction, setCorrection] = useState('')
+  const [correction, setCorrection] = useState<string | null>(null)
   const [retryClaim, setRetryClaim] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -145,7 +145,7 @@ export function GeneratePostTool() {
       correctedClaim || (retrySources ? retryClaim || undefined : selectedClaim)
     setRetryClaim(null)
     setFindings([])
-    setCorrection('')
+    setCorrection(null)
     setBusy(true)
     setError('')
     setSubmitted(false)
@@ -174,7 +174,7 @@ export function GeneratePostTool() {
           setRetryClaim(data.candidateClaim)
           setFindings(Array.isArray(data.findings) ? data.findings : [])
           setCorrection(
-            typeof data.suggestedCorrection === 'string' ? data.suggestedCorrection : '',
+            typeof data.suggestedCorrection === 'string' ? data.suggestedCorrection : null,
           )
         }
         throw new Error(data.error || 'Generation failed.')
@@ -258,7 +258,7 @@ export function GeneratePostTool() {
                     onClick={() => {
                       setRetryClaim(null)
                       setFindings([])
-                      setCorrection('')
+                      setCorrection(null)
                       setTopic(claim)
                       setSelectedClaim(claim)
                       setError('')
@@ -299,7 +299,7 @@ export function GeneratePostTool() {
               onChange={(event) => {
                 setRetryClaim(null)
                 setFindings([])
-                setCorrection('')
+                setCorrection(null)
                 setError('')
                 setTopic(event.target.value)
                 setSelectedClaim(selectedClaim !== undefined ? event.target.value : undefined)
@@ -336,7 +336,7 @@ export function GeneratePostTool() {
               ))}
             </ul>
           )}
-          {correction && !result && (
+          {correction !== null && !result && (
             <div className="correction-panel">
               <label htmlFor="corrected-claim">Suggested correction · edit before checking</label>
               <textarea
@@ -348,11 +348,13 @@ export function GeneratePostTool() {
                 disabled={busy || ideasBusy}
               />
               <button
-                disabled={busy || ideasBusy || !correction.trim()}
+                disabled={busy || ideasBusy || !correction?.trim()}
                 onClick={() => {
-                  setTopic(correction.trim())
-                  setSelectedClaim(correction.trim())
-                  void generate(false, correction.trim())
+                  const revised = correction?.trim()
+                  if (!revised) return
+                  setTopic(revised)
+                  setSelectedClaim(revised)
+                  void generate(false, revised)
                 }}
               >
                 Apply correction & recheck
