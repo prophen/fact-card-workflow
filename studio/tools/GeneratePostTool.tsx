@@ -32,6 +32,7 @@ export function GeneratePostTool() {
   const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
   const [findings, setFindings] = useState<Finding[]>([])
+  const [sourceContext, setSourceContext] = useState<string | undefined>()
   const [correction, setCorrection] = useState<string | null>(null)
   const [retryClaim, setRetryClaim] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -155,7 +156,7 @@ export function GeneratePostTool() {
     assetId.current = null
     setProgress(
       retrySources
-        ? 'Checking the same claim against more sources and longer source text…'
+        ? 'Adding more sources while keeping the earlier evidence…'
         : 'Finding sources, auditing each part of the claim, and preparing the caption…',
     )
     try {
@@ -165,13 +166,20 @@ export function GeneratePostTool() {
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {'Content-Type': 'application/json', Authorization: `Bearer ${token}`},
-        body: JSON.stringify({topic, candidateClaim, retrySources}),
+        body: JSON.stringify({
+          topic,
+          candidateClaim,
+          retrySources,
+          sourceContext: candidateClaim ? sourceContext : undefined,
+        }),
         signal: AbortSignal.timeout(180000),
       })
       const data = await response.json()
       if (!response.ok) {
+        if (response.status === 400) setSourceContext(undefined)
         if (data.code === 'SOURCE_VERIFICATION_FAILED' && typeof data.candidateClaim === 'string') {
           setRetryClaim(data.candidateClaim)
+          setSourceContext(typeof data.sourceContext === 'string' ? data.sourceContext : undefined)
           setFindings(Array.isArray(data.findings) ? data.findings : [])
           setCorrection(
             typeof data.suggestedCorrection === 'string' ? data.suggestedCorrection : null,
@@ -258,6 +266,7 @@ export function GeneratePostTool() {
                     onClick={() => {
                       setRetryClaim(null)
                       setFindings([])
+                      setSourceContext(undefined)
                       setCorrection(null)
                       setTopic(claim)
                       setSelectedClaim(claim)
@@ -299,6 +308,7 @@ export function GeneratePostTool() {
               onChange={(event) => {
                 setRetryClaim(null)
                 setFindings([])
+                setSourceContext(undefined)
                 setCorrection(null)
                 setError('')
                 setTopic(event.target.value)
@@ -359,7 +369,9 @@ export function GeneratePostTool() {
               >
                 Apply correction & recheck
               </button>
-              <p>The revision is checked against sources again before a card is created.</p>
+              <p>
+                The revision is checked against the same source excerpts before a card is created.
+              </p>
             </div>
           )}
           {retryClaim && !result && (
@@ -371,7 +383,7 @@ export function GeneratePostTool() {
                 Retry source checking
               </button>
               <p>
-                This checks the same claim against more sources. It still needs evidence and your
+                This adds sources to the earlier evidence. The claim still needs support and your
                 approval.
               </p>
             </div>

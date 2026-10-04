@@ -136,8 +136,8 @@ test('a corrected claim must pass a fresh source search and audit', async () => 
   expect(request).toHaveBeenCalledTimes(2)
 })
 
-test('fabricated quotes and invalid source indexes cannot pass the audit', async () => {
-  for (const change of [{quote: 'Invented evidence'}, {sourceIndex: 20}]) {
+test('fabricated quotes cannot pass the audit', async () => {
+  for (const change of [{quote: 'Invented evidence'}]) {
     const request = requestFor(
       sources,
       completion({findings: [{...supported.findings[0], ...change}]}),
@@ -294,4 +294,113 @@ test('does not duplicate a question already included in the caption', async () =
     claim,
   )
   expect(post.caption).toBe(complete)
+})
+
+test('correction rechecks the original evidence without replacing it with a new search', async () => {
+  const evidence = [
+    {title: 'Original archive', url: 'https://example.org/archive', highlights: [claim]},
+  ]
+  const request = requestFor(completion(supported), completion(caption))
+  const post = await generatePost(
+    'schools',
+    settings,
+    request,
+    undefined,
+    claim,
+    false,
+    [],
+    evidence,
+  )
+  expect(request).toHaveBeenCalledTimes(2)
+  expect(request.mock.calls.every(([url]) => String(url).includes('api.openai.com'))).toBe(true)
+  expect(post.source.citation).toContain('Original archive')
+  expect(post.verification?.sources).toEqual(evidence)
+})
+
+test('broader searches retain earlier evidence even if it is absent from the new results', async () => {
+  const previous = [
+    {title: 'Original archive', url: 'https://example.org/archive', highlights: [claim]},
+  ]
+  const request = requestFor(
+    {results: [{title: 'New source', url: 'https://example.org/new', text: 'Other context.'}]},
+    completion({findings: [{...supported.findings[0], sourceIndex: 1}]}),
+    completion(caption),
+  )
+  const post = await generatePost(
+    'schools',
+    settings,
+    request,
+    undefined,
+    claim,
+    true,
+    [],
+    previous,
+  )
+  expect(post.verification?.sources).toHaveLength(2)
+  expect(post.source.citation).toContain(claim)
+})
+
+test('longer text from the same source augments rather than replaces its earlier highlights', async () => {
+  const previous = [{title: 'Archive', url: 'https://example.org/archive', highlights: [claim]}]
+  const request = requestFor(
+    {results: [{title: 'Archive', url: previous[0].url, text: 'Different section of the page.'}]},
+    completion(supported),
+    completion(caption),
+  )
+  const post = await generatePost(
+    'schools',
+    settings,
+    request,
+    undefined,
+    claim,
+    true,
+    [],
+    previous,
+  )
+  expect(post.verification?.sources[0].highlights).toEqual([
+    claim,
+    'Different section of the page.',
+  ])
+})
+
+test('failed audits carry the exact source excerpts used to suggest the revision', async () => {
+  const candidate = claim + ' It was the first in the state.'
+  const request = requestFor(
+    sources,
+    completion({
+      findings: [
+        ...supported.findings,
+        {part: 'It was the first in the state.', status: 'unsupported', detail: 'No evidence.'},
+      ],
+    }),
+    completion({fact: claim}),
+  )
+  await expect(
+    generatePost('schools', settings, request, undefined, candidate),
+  ).rejects.toMatchObject({
+    sources: sources.results.map(({title, url, highlights}) => ({title, url, highlights})),
+    suggestedCorrection: claim,
+  })
+})
+
+test('a real quote is attributed to its retrieved source despite a wrong model source index', async () => {
+  for (const sourceIndex of [1, 20, undefined]) {
+    const request = requestFor(
+      {
+        results: [
+          ...sources.results,
+          {
+            title: 'Other archive',
+            url: 'https://example.org/other',
+            highlights: ['Unrelated context.'],
+          },
+        ],
+      },
+      completion({findings: [{...supported.findings[0], sourceIndex}]}),
+      completion(caption),
+    )
+    const post = await generatePost('schools', settings, request, undefined, claim)
+    expect(post.verification?.findings[0].sourceIndex).toBe(0)
+    expect(post.source.url).toBe('https://example.org/archive')
+  }
 })

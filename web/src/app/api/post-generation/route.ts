@@ -1,5 +1,6 @@
 import { createClient } from "next-sanity";
-import { SourceVerificationError } from "../../../../../shared/generate-post";
+import {readSourceContext, signSourceContext} from "../../../../../shared/source-context";
+import { SourceVerificationError, type Evidence } from "../../../../../shared/generate-post";
 import { generatePost } from "@/lib/generate-post";
 import { generateIdeas } from "../../../../../shared/generate-ideas";
 import { renderCard } from "../../../../../shared/render-card";
@@ -86,6 +87,7 @@ export async function POST(request: Request) {
   let mode: "ideas" | "post" = "post";
   let candidateClaim: string | undefined;
   let retrySources = false;
+  let sourceEvidence: Evidence[] = [];
   try {
     const body = await request.json();
     if (
@@ -107,6 +109,11 @@ export async function POST(request: Request) {
         400,
       );
     candidateClaim = body.candidateClaim?.trim();
+    if (body.sourceContext !== undefined) {
+      if (!openaiKey || !candidateClaim) return reply(request, {error: "Choose a claim before reusing its sources."}, 400);
+      try { sourceEvidence = readSourceContext(body.sourceContext, user.id, openaiKey); }
+      catch (error) { return reply(request, {error: error instanceof Error ? error.message : "Invalid source context."}, 400); }
+    }
     if (
       body.retrySources !== undefined &&
       typeof body.retrySources !== "boolean"
@@ -144,7 +151,7 @@ export async function POST(request: Request) {
       },
       503,
     );
-  const requestKey = `${user.id}:${retrySources ? "source-retry" : mode}`;
+  const requestKey = `${user.id}:${retrySources ? "source-retry" : sourceEvidence.length ? "correction" : mode}`;
   if (
     active.has(user.id) ||
     Date.now() - (lastRequest.get(requestKey) || 0) < 10000
@@ -188,6 +195,7 @@ export async function POST(request: Request) {
       candidateClaim,
       retrySources,
       previousFacts,
+      sourceEvidence,
     );
     const png = await renderCard(post.factText);
     return reply(request, { ...post, cardPng: png.toString("base64") }, 200);
@@ -201,6 +209,8 @@ export async function POST(request: Request) {
           candidateClaim: error.candidateClaim,
           findings: error.findings,
           suggestedCorrection: error.suggestedCorrection,
+          sources: error.sources,
+          ...(error.sources.length && openaiKey ? {sourceContext: signSourceContext(error.sources, user.id, openaiKey)} : {}),
         },
         422,
       );

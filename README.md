@@ -51,11 +51,12 @@ You can also type your own topic and generate directly. Suggestions are
 unverified candidates, not approved historical facts. Suggestions focus on one
 concrete event or action rather than a broad biography or impact claim. If evidence
 is insufficient, **Retry source checking** keeps the same candidate and searches
-more sources with longer page text. The tool audits each checkable part across the retrieved sources, following the
+more sources with longer page text while retaining the original excerpts. The tool audits each checkable part across the retrieved sources, following the
 original CBS Post Generator's audit and correction flow. When a claim is mixed or
 contradicted, it shows the findings and offers an editable suggested correction
-where evidence allows. **Apply correction & recheck** runs a fresh source search
-and audit; the suggestion alone cannot create a post. Successful claims are
+where evidence allows. **Apply correction & recheck** checks the revision against the same evidence that produced the suggestion; the suggestion alone cannot create a post. Saved source excerpts are signed by the server,
+bound to your Studio user, and available for 30 minutes; editing the main claim
+starts a new source check. Successful claims are
 cross-checked against up to 100 recent approved/published Sanity posts (including
 approved drafts). A conflict blocks card generation. A separate caption step
 adds a short engagement question. A complete caption can include its question directly;

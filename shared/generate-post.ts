@@ -2,7 +2,11 @@ export type GeneratedPost = {
   factText: string;
   caption: string;
   source: { citation: string; url: string };
-  verification?: { originalClaim: string; findings: Finding[] };
+  verification?: {
+    originalClaim: string;
+    findings: Finding[];
+    sources: Evidence[];
+  };
 };
 export type Finding = {
   part: string;
@@ -18,12 +22,13 @@ export class SourceVerificationError extends Error {
     readonly candidateClaim: string,
     readonly findings: Finding[] = [],
     readonly suggestedCorrection?: string,
+    readonly sources: Evidence[] = [],
   ) {
     super(message);
     this.name = "SourceVerificationError";
   }
 }
-type Evidence = { title: string; url: string; highlights: string[] };
+export type Evidence = { title: string; url: string; highlights: string[] };
 type Settings = { openaiKey: string; exaKey: string; model: string };
 
 const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
@@ -42,6 +47,7 @@ export async function generatePost(
   candidateClaim?: string,
   retrySources = false,
   previousFacts: string[] = [],
+  previousEvidence: Evidence[] = [],
 ): Promise<GeneratedPost> {
   async function json(
     url: string,
@@ -97,17 +103,20 @@ export async function generatePost(
         );
   const claim = text(candidate.claim, 400);
   if (!claim) throw new Error("No usable candidate fact was generated.");
-  const search = await json(
-    "https://api.exa.ai/search",
-    { "x-api-key": settings.exaKey },
-    {
-      query: claim,
-      numResults: retrySources ? 10 : 5,
-      contents: retrySources
-        ? { text: { maxCharacters: 8000 } }
-        : { highlights: true },
-    },
-  );
+  const search =
+    previousEvidence.length && !retrySources
+      ? { results: [] }
+      : await json(
+          "https://api.exa.ai/search",
+          { "x-api-key": settings.exaKey },
+          {
+            query: claim,
+            numResults: retrySources ? 10 : 5,
+            contents: retrySources
+              ? { text: { maxCharacters: 8000 } }
+              : { highlights: true },
+          },
+        );
   const evidence: Evidence[] = (
     Array.isArray(search.results) ? search.results : []
   ).flatMap((item: Record<string, unknown>) => {
@@ -124,6 +133,15 @@ export async function generatePost(
       return [];
     return [{ title, url, highlights }];
   });
+  // Corrections use the evidence that produced them; broader searches add evidence.
+  for (const previous of previousEvidence) {
+    const source = evidence.find((item) => item.url === previous.url);
+    if (source)
+      source.highlights = [
+        ...new Set([...previous.highlights, ...source.highlights]),
+      ];
+    else evidence.push(previous);
+  }
   if (evidence.length === 0)
     throw new SourceVerificationError(
       "No source evidence was found. Retry source checking or narrow the claim. No post was created.",
@@ -153,14 +171,19 @@ export async function generatePost(
       typeof f.sourceIndex === "number" && Number.isInteger(f.sourceIndex)
         ? evidence[f.sourceIndex]
         : undefined;
-    return source &&
+    const containsQuote = (item: Evidence) =>
       f.quote &&
-      source.highlights.some((h) => normalize(h).includes(normalize(f.quote!)))
+      item.highlights.some((h) => normalize(h).includes(normalize(f.quote!)));
+    // The model can misnumber a real excerpt. Ground it in the actual retrieved
+    // source rather than discarding valid evidence because of a citation index.
+    return source && containsQuote(source)
       ? source
-      : undefined;
+      : evidence.find(containsQuote);
   }
   for (const finding of findings) {
-    if (finding.status !== "unsupported" && !cited(finding)) {
+    const actualSource = cited(finding);
+    if (actualSource) finding.sourceIndex = evidence.indexOf(actualSource);
+    if (finding.status !== "unsupported" && !actualSource) {
       finding.status = "unsupported";
       finding.detail =
         "The returned quote could not be located in the retrieved evidence.";
@@ -181,6 +204,7 @@ export async function generatePost(
       claim,
       findings,
       suggestedCorrection,
+      evidence,
     );
   }
   // Preserve the audited wording: caption generation cannot silently rewrite the fact.
@@ -189,6 +213,8 @@ export async function generatePost(
       "Shorten this verified claim to 280 characters for the card, then check it again.",
       claim,
       findings,
+      undefined,
+      evidence,
     );
   if (previousFacts.length) {
     const crosschecked = await completion(
@@ -244,6 +270,6 @@ export async function generatePost(
       citation: citations.map((c) => `${c.citation} (${c.url})`).join("\n\n"),
       url: citations[0].url,
     },
-    verification: { originalClaim: claim, findings },
+    verification: { originalClaim: claim, findings, sources: evidence },
   };
 }
