@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "studio:dev": "npm --prefix studio run dev",
+    "web:check-render": "node scripts/check-production-render.cjs",
     "web:dev": "npm --prefix web run dev",
     "runtime:plan": "studio/node_modules/.bin/sanity blueprints plan",
     "runtime:deploy": "studio/node_modules/.bin/sanity blueprints deploy",

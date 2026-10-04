@@ -144,3 +144,10 @@ This publishes content in Sanity; Facebook and Buffer are outside the demo.
 
 See [the Path Two submission package](submission/README.md) for the DEV article
 draft, demo script, screenshots, prompt notes, and final publishing checklist.
+
+### Check production card rendering
+
+After `npm --prefix web run build -- --webpack`, run `npm run web:check-render`.
+This exercises the compiled generation endpoint with mocked providers, checks
+that the renderer produces a 1080 × 1080 PNG, and confirms the rendering WASM
+file is included in the deployment trace. It needs no keys and saves no post.
