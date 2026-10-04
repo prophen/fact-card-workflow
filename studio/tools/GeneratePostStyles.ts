@@ -302,6 +302,27 @@ export const GeneratorPage = styled.div`
   .sources-list a {
     overflow-wrap: anywhere;
   }
+  .text-action {
+    background: transparent;
+    border: 0;
+    border-radius: 2px;
+    padding: 2px 0;
+    color: var(--muted);
+    font-weight: 500;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .text-action:hover:not(:disabled) {
+    background: transparent;
+    color: var(--ink);
+  }
+  .audit-review-fields {
+    padding-top: 20px;
+  }
+  .audit-review-panel summary:focus-visible {
+    outline: 3px solid #aa791c;
+    outline-offset: 3px;
+  }
   .audit-review-panel {
     border-top: 1px solid var(--line);
     padding-top: 20px;

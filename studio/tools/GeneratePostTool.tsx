@@ -47,6 +47,7 @@ export function GeneratePostTool() {
   const [sources, setSources] = useState<Evidence[]>([])
   const [readyClaim, setReadyClaim] = useState<string | null>(null)
   const [audit, setAudit] = useState<AuditState | undefined>()
+  const [reviewOpen, setReviewOpen] = useState(false)
   const [reviewFinding, setReviewFinding] = useState<number | null>(null)
   const [reviewExplanation, setReviewExplanation] = useState('')
   const [supportingUrl, setSupportingUrl] = useState('')
@@ -216,6 +217,7 @@ export function GeneratePostTool() {
         if (data.code === 'SOURCE_VERIFICATION_FAILED' && typeof data.candidateClaim === 'string') {
           setAudit(data.audit)
           setReviewFinding(null)
+          setReviewOpen(false)
           setSupportingUrl(data.sources?.[0]?.url || '')
           setSources(Array.isArray(data.sources) ? data.sources : [])
           setPreparedClaim(data.rewriteReady ? data.suggestedCorrection : null)
@@ -231,6 +233,7 @@ export function GeneratePostTool() {
       if (!acceptRewrite) {
         setAudit(data.verification)
         setReviewFinding(null)
+        setReviewOpen(false)
         setSupportingUrl(data.verification?.sources?.[0]?.url || '')
         setConflicts(data.verification?.conflicts || [])
         setSources(data.verification?.sources || [])
@@ -297,6 +300,7 @@ export function GeneratePostTool() {
       setPreparedClaim(null)
       setCorrection(null)
       setReviewFinding(null)
+      setReviewOpen(false)
       setReviewExplanation('')
       if (data.readyClaim) {
         setTopic(data.readyClaim)
@@ -378,6 +382,7 @@ export function GeneratePostTool() {
                     onClick={() => {
                       setAudit(undefined)
                       setReviewFinding(null)
+                      setReviewOpen(false)
                       setReviewExplanation('')
                       setSources([])
                       setReadyClaim(null)
@@ -424,6 +429,7 @@ export function GeneratePostTool() {
               onChange={(event) => {
                 setAudit(undefined)
                 setReviewFinding(null)
+                setReviewOpen(false)
                 setReviewExplanation('')
                 setSources([])
                 setConflicts([])
@@ -549,8 +555,10 @@ export function GeneratePostTool() {
                 {audit && !result && (
                   <button
                     type="button"
+                    className="text-action"
                     disabled={busy || ideasBusy}
                     onClick={() => {
+                      setReviewOpen(true)
                       setReviewFinding(index)
                       setReviewExplanation('')
                     }}
@@ -562,56 +570,60 @@ export function GeneratePostTool() {
             ))}
           </ul>
           {audit && !result && (
-            <div className="audit-review-panel">
-              <h3>
-                {reviewFinding !== null
-                  ? `Recheck: ${findings[reviewFinding]?.part}`
-                  : 'Disagree with the audit?'}
-              </h3>
-              <label htmlFor="audit-explanation">Explain why you disagree</label>
-              <textarea
-                id="audit-explanation"
-                rows={3}
-                maxLength={1500}
-                value={reviewExplanation}
-                onChange={(event) => setReviewExplanation(event.target.value)}
-                disabled={busy}
-                placeholder="For example: a later chapter does not contradict this being the first chapter."
-              />
-              {reviewFinding !== null && (
+            <details
+              className="audit-review-panel"
+              open={reviewOpen}
+              onToggle={(event) => setReviewOpen(event.currentTarget.open)}
+            >
+              <summary>Disagree with the audit?</summary>
+              <div className="audit-review-fields">
+                {reviewFinding !== null && <h3>Recheck: {findings[reviewFinding]?.part}</h3>}
+                <label htmlFor="audit-explanation">Explain why you disagree</label>
+                <textarea
+                  id="audit-explanation"
+                  rows={3}
+                  maxLength={1500}
+                  value={reviewExplanation}
+                  onChange={(event) => setReviewExplanation(event.target.value)}
+                  disabled={busy}
+                  placeholder="For example: a later chapter does not contradict this being the first chapter."
+                />
+                {reviewFinding !== null && (
+                  <button
+                    type="button"
+                    className="text-action"
+                    disabled={busy || !reviewExplanation.trim()}
+                    onClick={() => void reviewAudit('recheck')}
+                  >
+                    Recheck using these sources
+                  </button>
+                )}
+                <label htmlFor="override-source">Supporting source for a reviewer override</label>
+                <select
+                  id="override-source"
+                  value={supportingUrl}
+                  onChange={(event) => setSupportingUrl(event.target.value)}
+                  disabled={busy}
+                >
+                  {sources.map((source) => (
+                    <option key={source.url} value={source.url}>
+                      {source.title}
+                    </option>
+                  ))}
+                </select>
                 <button
                   type="button"
-                  disabled={busy || !reviewExplanation.trim()}
-                  onClick={() => void reviewAudit('recheck')}
+                  disabled={busy || !reviewExplanation.trim() || !supportingUrl}
+                  onClick={() => void reviewAudit('override')}
                 >
-                  Recheck using these sources
+                  Keep original claim · record override
                 </button>
-              )}
-              <label htmlFor="override-source">Supporting source for a reviewer override</label>
-              <select
-                id="override-source"
-                value={supportingUrl}
-                onChange={(event) => setSupportingUrl(event.target.value)}
-                disabled={busy}
-              >
-                {sources.map((source) => (
-                  <option key={source.url} value={source.url}>
-                    {source.title}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                disabled={busy || !reviewExplanation.trim() || !supportingUrl}
-                onClick={() => void reviewAudit('override')}
-              >
-                Keep original claim · record override
-              </button>
-              <p>
-                Your explanation and source are saved with the original audit. This decision allows
-                card creation, not publication.
-              </p>
-            </div>
+                <p>
+                  Your explanation and source are saved with the original audit. This decision
+                  allows card creation, not publication.
+                </p>
+              </div>
+            </details>
           )}
           {audit && (
             <details>
