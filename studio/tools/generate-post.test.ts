@@ -231,16 +231,26 @@ test('missing sources and provider errors do not substitute placeholder content'
   ).rejects.toThrow('429')
 })
 
-test('an invalid caption and oversized card fact are rejected', async () => {
-  await expect(
-    generatePost(
+test('caption formatting failures use the verified fact and an engagement question', async () => {
+  for (const malformed of [
+    {...caption, cta: 'No question.'},
+    {},
+    {caption: 'x'.repeat(701)},
+    {caption: 'x'.repeat(650), cta: 'What would you like to learn about this story?'.repeat(2)},
+  ]) {
+    const post = await generatePost(
       'schools',
       settings,
-      requestFor(sources, completion(supported), completion({...caption, cta: 'No question.'})),
+      requestFor(sources, completion(supported), completion(malformed)),
       undefined,
       claim,
-    ),
-  ).rejects.toThrow('incomplete caption')
+    )
+    expect(post.caption).toBe(`${claim} What would you like to learn about this story?`)
+    expect(post.factText).toBe(claim)
+  }
+})
+
+test('oversized card facts still require shortening and a fresh audit', async () => {
   await expect(
     generatePost(
       'schools',
@@ -265,4 +275,23 @@ test('audit details not asserted in the candidate are excluded from correction f
   )
   const post = await generatePost('schools', settings, request, undefined, claim)
   expect(post.verification?.findings).toHaveLength(1)
+})
+
+test('accepts a complete caption with an embedded question and no separate cta', async () => {
+  const complete = 'This community established a school. What would you like to learn?'
+  const request = requestFor(sources, completion(supported), completion({caption: complete}))
+  const post = await generatePost('schools', settings, request, undefined, claim)
+  expect(post.caption).toBe(complete)
+  expect(request).toHaveBeenCalledTimes(3)
+})
+test('does not duplicate a question already included in the caption', async () => {
+  const complete = 'This community established a school. What would you like to learn?'
+  const post = await generatePost(
+    'schools',
+    settings,
+    requestFor(sources, completion(supported), completion({caption: complete, cta: caption.cta})),
+    undefined,
+    claim,
+  )
+  expect(post.caption).toBe(complete)
 })

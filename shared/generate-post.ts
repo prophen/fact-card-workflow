@@ -215,14 +215,19 @@ export async function generatePost(
     `Write a Facebook caption for California Black Stories from the verified fact. Use one or two short sentences in a plain natural voice and end with one short engagement question. Add no unverified factual context. No hype, emojis, hashtags or em dashes. Return JSON {"caption":"...","cta":"question?"}.`,
     JSON.stringify({ fact: claim, revision }),
   );
-  const captionText = text(captionResult.caption, 600);
-  const cta = text(captionResult.cta, 100);
+  const captionText = text(captionResult.caption, 700);
+  const cta = text(captionResult.cta, 300);
+  // Models sometimes put the question inside caption instead of the separate cta.
+  // A formatting failure must not discard a successfully verified claim.
+  const combined = captionText?.endsWith("?")
+    ? captionText
+    : captionText && cta?.endsWith("?")
+      ? `${captionText} ${cta}`
+      : undefined;
   const caption =
-    captionText && cta?.endsWith("?") ? `${captionText} ${cta}` : undefined;
-  if (!caption || caption.length > 700)
-    throw new Error(
-      "The caption generator returned an incomplete caption. Please try again.",
-    );
+    combined && combined.length <= 700
+      ? combined
+      : `${claim} What would you like to learn about this story?`;
   const citations = findings
     .map((f) => {
       const source = cited(f)!;

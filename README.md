@@ -58,7 +58,9 @@ where evidence allows. **Apply correction & recheck** runs a fresh source search
 and audit; the suggestion alone cannot create a post. Successful claims are
 cross-checked against up to 100 recent approved/published Sanity posts (including
 approved drafts). A conflict blocks card generation. A separate caption step
-adds a short engagement question. Supporting excerpts and URLs from all cited
+adds a short engagement question. A complete caption can include its question directly;
+if the model returns incomplete caption fields, the app uses the verified fact
+plus a simple engagement question instead of discarding the card. Supporting excerpts and URLs from all cited
 sources are kept in the citation; `source.url` is the first supporting source. It
 renders the CBS black-and-gold template as a 1080 × 1080 PNG, uploads it to Sanity,
 creates a draft `post` and its workflow, and submits the card to **In review**.
