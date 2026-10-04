@@ -1,8 +1,8 @@
 import satori from 'satori'
 import {Resvg, initWasm} from '@resvg/resvg-wasm'
-import {createRequire} from 'node:module'
+import nodeModule from 'node:module'
 import {readFile} from 'node:fs/promises'
-import {dirname, join} from 'node:path'
+import {join} from 'node:path'
 import {cardFont} from './card-font'
 
 export const cardTemplate = 'defaultFactCard'
@@ -12,7 +12,12 @@ let wasmReady: Promise<void> | undefined
 export async function renderCard(factText: string, template = cardTemplate): Promise<Buffer> {
   if (template !== cardTemplate) throw new Error(`Unsupported card template: ${template}`)
   if (!factText.trim() || factText.length > 280) throw new Error('Card fact must be 1–280 characters.')
-  wasmReady ||= readFile(join(dirname(createRequire(import.meta.url).resolve('@resvg/resvg-wasm')), 'index_bg.wasm')).then(initWasm)
+  // Resolve with Node at runtime. Webpack turns import.meta-based require.resolve
+  // into a numeric module ID, which is not a filesystem path.
+  const runtimeRequire = Reflect.apply(nodeModule.createRequire, undefined, [
+    join(process.cwd(), 'package.json'),
+  ]) as ReturnType<typeof nodeModule.createRequire>
+  wasmReady ||= readFile(runtimeRequire.resolve('@resvg/resvg-wasm/index_bg.wasm')).then(initWasm)
   await wasmReady
   const label = (text: string) => ({
     type: 'div',
