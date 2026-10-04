@@ -154,3 +154,7 @@ After `npm --prefix web run build -- --webpack`, run `npm run web:check-render`.
 This exercises the compiled generation endpoint with mocked providers, checks
 that the renderer produces a 1080 × 1080 PNG, and confirms the rendering WASM
 file is included in the deployment trace. It needs no keys and saves no post.
+
+Caption-only workflow feedback preserves the verified fact, citation, and card.
+Image-only feedback renders the existing fact again. Factual or source changes
+use verification; a checked correction can return to review, never approval.

@@ -1,6 +1,10 @@
 import type { SanityClient } from "@sanity/client";
 import { extractDocumentId, type EffectHandler } from "@sanity/workflow-engine";
-import { generatePost } from "../../shared/generate-post";
+import { revisionScope, reviseCaption } from "../../shared/revise-presentation";
+import {
+  generatePost,
+  SourceVerificationError,
+} from "../../shared/generate-post";
 import { renderCard, cardTemplate } from "../../shared/render-card";
 
 type Post = {
@@ -9,6 +13,9 @@ type Post = {
   _type: string;
   topic?: string;
   factText?: string;
+  caption?: string;
+  source?: { citation?: string; url?: string };
+  image?: { asset?: { _ref?: string } };
   renderTemplate?: string;
   regenerationKey?: string;
 };
@@ -45,11 +52,12 @@ export function regenerationHandler(client: SanityClient): EffectHandler {
     try {
       const openaiKey = process.env.OPENAI_API_KEY;
       const exaKey = process.env.EXA_API_KEY;
-      if (!openaiKey || !exaKey)
+      const scope = revisionScope(params.revisionNote);
+      if ((scope !== "image" && !openaiKey) || (scope === "content" && !exaKey))
         throw new Error(
-          "The background Function needs its OpenAI and Exa keys configured.",
+          "The background Function needs its generation provider keys configured.",
         );
-      if (!post.topic)
+      if (scope === "content" && !post.topic)
         throw new Error("Add a topic to this post before retrying generation.");
       await client
         .patch(draftId)
@@ -57,50 +65,98 @@ export function regenerationHandler(client: SanityClient): EffectHandler {
         .unset(["generationError"])
         .commit();
       post = (await client.getDocument<Post>(draftId))!;
-      const previousFacts = await client.fetch<string[]>(
-        '*[_type == "post" && status in ["approved", "published"] && !(_id in path("versions.**")) && _id != $id] | order(_updatedAt desc)[0...100].factText',
-        { id },
-        { perspective: "drafts" },
-      );
-      const generated = await generatePost(
-        post.topic!,
-        {
-          openaiKey,
-          exaKey,
-          model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-        },
-        fetch,
-        { note: params.revisionNote, previousFact: post.factText || "" },
-        undefined,
-        false,
-        previousFacts,
-      );
-      const { verification, ...content } = generated;
-      void verification;
-      const png = await renderCard(
-        generated.factText,
-        post.renderTemplate || cardTemplate,
-      );
+      let content: Record<string, unknown>;
+      let png: Buffer | undefined;
+      if (scope !== "content") {
+        if (
+          !post.factText ||
+          !post.source?.citation ||
+          !post.source.url ||
+          !post.caption ||
+          !post.image?.asset?._ref
+        )
+          throw new Error(
+            "This post needs its existing fact, source, caption, and card before a presentation-only revision.",
+          );
+        content = {};
+        if (scope === "caption" || scope === "presentation") {
+          content.caption = await reviseCaption(
+            post.factText,
+            post.caption,
+            params.revisionNote,
+            {
+              openaiKey: openaiKey!,
+              model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+            },
+          );
+        }
+        if (scope === "image" || scope === "presentation")
+          png = await renderCard(
+            post.factText,
+            post.renderTemplate || cardTemplate,
+          );
+      } else {
+        const previousFacts = await client.fetch<string[]>(
+          '*[_type == "post" && status in ["approved", "published"] && !(_id in path("versions.**")) && _id != $id] | order(_updatedAt desc)[0...100].factText',
+          { id },
+          { perspective: "drafts" },
+        );
+        let generated;
+        try {
+          generated = await generatePost(
+            post.topic!,
+            {
+              openaiKey: openaiKey!,
+              exaKey: exaKey!,
+              model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+            },
+            fetch,
+            { note: params.revisionNote, previousFact: post.factText || "" },
+            undefined,
+            false,
+            previousFacts,
+          );
+        } catch (error) {
+          if (
+            !(error instanceof SourceVerificationError) ||
+            !error.preparedRewrite
+          )
+            throw error;
+          // A checked correction still returns to human review; it never approves itself.
+          generated = error.preparedRewrite;
+        }
+        content = {
+          factText: generated.factText,
+          caption: generated.caption,
+          source: { _type: "source", ...generated.source },
+          renderTemplate: post.renderTemplate || cardTemplate,
+        };
+        png = await renderCard(
+          generated.factText,
+          post.renderTemplate || cardTemplate,
+        );
+      }
       if (!(await isCurrent()))
         throw new Error(
           "The workflow changed while generating the replacement.",
         );
-      const asset = await client.assets.upload("image", png, {
-        filename: "cbs-fact-card.png",
-        contentType: "image/png",
-      });
+      if (png) {
+        const asset = await client.assets.upload("image", png, {
+          filename: "cbs-fact-card.png",
+          contentType: "image/png",
+        });
+        content.image = {
+          _type: "image",
+          asset: { _type: "reference", _ref: asset._id },
+        };
+      }
       // Do not overwrite edits made by a reviewer while the providers were running.
       await client
         .patch(draftId)
         .ifRevisionId(post._rev)
         .set({
           ...content,
-          source: { _type: "source", ...generated.source },
-          renderTemplate: post.renderTemplate || cardTemplate,
-          image: {
-            _type: "image",
-            asset: { _type: "reference", _ref: asset._id },
-          },
+
           regenerationKey: ctx.effectKey,
         })
         .unset(["generationError"])
