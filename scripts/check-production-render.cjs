@@ -40,5 +40,10 @@ global.fetch=async(input,options={})=>{
  const tampered=await post({topic:fact,candidateClaim:fact,sourceContext:revision.sourceContext+'changed'});
  assert.equal(tampered.status,400,'Fabricated source contexts must be rejected.');
  const png=Buffer.from(data.cardPng,'base64');assert.equal(png.subarray(1,4).toString(),'PNG');assert.equal(png.readUInt32BE(16),1080);assert.equal(png.readUInt32BE(20),1080);
+ const verified=await post({mode:'verify',topic:fact,candidateClaim:fact});
+ const verifiedData=await verified.json();assert.equal(verified.status,200,verifiedData.error);
+ assert.ok(verifiedData.sourceContext,'Verified claims need signed context for card creation.');
+ assert.equal(verifiedData.cardPng,undefined,'Verification must show sources before rendering a card.');
+ assert.equal(verifiedData.verification.sources[0].url,'https://example.org');
  console.log('Compiled correction flow reused its signed evidence and rendered a valid 1080 × 1080 PNG with mocked providers.');
 })().catch(e=>{console.error(e.message);process.exitCode=1});
