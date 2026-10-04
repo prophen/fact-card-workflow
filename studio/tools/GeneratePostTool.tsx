@@ -2,9 +2,15 @@ import {useRef, useState} from 'react'
 import {useClient} from 'sanity'
 import {IntentLink} from 'sanity/router'
 import {refDataset} from '@sanity/workflow-engine'
+import {defaultCoreTopics} from '../../shared/core-topics'
 import {createPostEngineFromClient} from '../workflows/runtime'
 
-type GeneratedPost = {factText: string; caption: string; source: {citation: string; url: string}; cardPng: string}
+type GeneratedPost = {
+  factText: string
+  caption: string
+  source: {citation: string; url: string}
+  cardPng: string
+}
 const template = 'defaultFactCard'
 const apiUrl = `${(process.env.SANITY_STUDIO_GENERATION_API_URL || 'http://localhost:3000').replace(/\/$/, '')}/api/post-generation`
 
@@ -14,6 +20,11 @@ export function GeneratePostTool() {
     perspective: 'raw',
   })
   const [topic, setTopic] = useState('')
+  const [coreTopics, setCoreTopics] = useState(defaultCoreTopics)
+  const [ideas, setIdeas] = useState<string[]>([])
+  const [ideasBusy, setIdeasBusy] = useState(false)
+  const [ideasError, setIdeasError] = useState('')
+  const [selectedClaim, setSelectedClaim] = useState<string | undefined>()
   const [result, setResult] = useState<GeneratedPost | null>(null)
   const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
@@ -63,7 +74,9 @@ export function GeneratePostTool() {
       }
       setProgress('Uploading the rendered card PNG…')
       if (!assetId.current) {
-        const png = new Blob([Uint8Array.from(atob(post.cardPng), (c) => c.charCodeAt(0))], {type: 'image/png'})
+        const png = new Blob([Uint8Array.from(atob(post.cardPng), (c) => c.charCodeAt(0))], {
+          type: 'image/png',
+        })
         const asset = await client.assets.upload('image', png, {
           filename: 'cbs-fact-card.png',
           contentType: 'image/png',
@@ -91,6 +104,36 @@ export function GeneratePostTool() {
     }
   }
 
+  async function suggestIdeas() {
+    setIdeasBusy(true)
+    setIdeasError('')
+    try {
+      const token = client.config().token
+      if (!token) throw new Error('Sign in to Studio to generate topic ideas.')
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', Authorization: `Bearer ${token}`},
+        body: JSON.stringify({mode: 'ideas', topic: coreTopics}),
+        signal: AbortSignal.timeout(90000),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Could not generate topic ideas.')
+      if (
+        !Array.isArray(data.claims) ||
+        !data.claims.length ||
+        data.claims.some((claim: unknown) => typeof claim !== 'string')
+      )
+        throw new Error('No usable topic ideas were returned.')
+      setIdeas(data.claims)
+    } catch (cause) {
+      setIdeasError(
+        cause instanceof Error ? cause.message : 'Could not reach the generation server.',
+      )
+    } finally {
+      setIdeasBusy(false)
+    }
+  }
+
   async function generate() {
     setBusy(true)
     setError('')
@@ -107,7 +150,7 @@ export function GeneratePostTool() {
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {'Content-Type': 'application/json', Authorization: `Bearer ${token}`},
-        body: JSON.stringify({topic}),
+        body: JSON.stringify({topic, candidateClaim: selectedClaim}),
         signal: AbortSignal.timeout(180000),
       })
       const data = await response.json()
@@ -145,6 +188,67 @@ export function GeneratePostTool() {
         Choose a California Black history topic. We’ll generate one fact, check its source, render a
         card, and bring it to you for review.
       </p>
+      <section style={{maxWidth: 680, marginBottom: 32}} aria-labelledby="topic-ideas-heading">
+        <h2 id="topic-ideas-heading">1. Find a story idea</h2>
+        <p>
+          Start with broad categories and get five specific ideas. Ideas still need source checking.
+        </p>
+        <label htmlFor="core-topics">Core topics (comma separated)</label>
+        <textarea
+          id="core-topics"
+          rows={3}
+          maxLength={500}
+          value={coreTopics}
+          onChange={(event) => setCoreTopics(event.target.value)}
+          disabled={busy || ideasBusy || Boolean(result && !submitted)}
+          style={{
+            display: 'block',
+            width: '100%',
+            boxSizing: 'border-box',
+            padding: 12,
+            font: 'inherit',
+            margin: '8px 0 12px',
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => void suggestIdeas()}
+          disabled={busy || ideasBusy || !coreTopics.trim() || Boolean(result && !submitted)}
+          style={{padding: 12, font: 'inherit'}}
+        >
+          {ideasBusy ? 'Finding ideas…' : 'Suggest five ideas'}
+        </button>
+        <p role="status" aria-live="polite">
+          {ideasBusy ? 'Generating unverified claim ideas…' : ''}
+        </p>
+        {ideasError && <p role="alert">{ideasError}</p>}
+        {ideas.length > 0 && (
+          <ul style={{listStyle: 'none', padding: 0, display: 'grid', gap: 12}}>
+            {ideas.map((claim) => (
+              <li key={claim} style={{border: '1px solid #999', borderRadius: 8, padding: 16}}>
+                <p style={{marginTop: 0}}>{claim}</p>
+                <button
+                  type="button"
+                  disabled={busy || ideasBusy || Boolean(result && !submitted)}
+                  onClick={() => {
+                    setTopic(claim)
+                    setSelectedClaim(claim)
+                    setError('')
+                    setProgress(
+                      'Idea selected. Generate the post to check its source and render the card.',
+                    )
+                  }}
+                  aria-pressed={selectedClaim === claim}
+                  style={{padding: 8, font: 'inherit'}}
+                >
+                  {selectedClaim === claim ? 'Selected' : 'Use this idea'}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+      <h2>2. Verify and generate a post</h2>
       <form
         onSubmit={(event) => {
           event.preventDefault()
@@ -158,15 +262,18 @@ export function GeneratePostTool() {
           rows={3}
           maxLength={500}
           value={topic}
-          onChange={(event) => setTopic(event.target.value)}
-          disabled={busy || Boolean(result && !submitted)}
+          onChange={(event) => {
+            setTopic(event.target.value)
+            setSelectedClaim(undefined)
+          }}
+          disabled={busy || ideasBusy || Boolean(result && !submitted)}
           placeholder="For example: Black communities in Oakland"
           required
           style={{padding: 12, font: 'inherit'}}
         />
         <button
           type="submit"
-          disabled={busy || !topic.trim() || Boolean(result && !submitted)}
+          disabled={busy || ideasBusy || !topic.trim() || Boolean(result && !submitted)}
           style={{padding: 12, font: 'inherit', cursor: 'pointer'}}
         >
           Generate post

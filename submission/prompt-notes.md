@@ -6,6 +6,7 @@ These are selected user requests from the Codex build conversation, not an expor
 |---|---|
 | “Use Sanity's official Editorial Workflows feature” | The editorial process became a workflow definition with agent submission, human approval, rejection, and terminal publication. |
 | “can we handle it automatically instead” | Replaced routine manual effect draining with an event-driven Sanity Function. |
+| “Can you bring in the topic generation feature from cbs-post-generator? I'm having a hard time generating posts” | Added five candidate claim suggestions from the original core categories, followed by verification of the selected idea. |
 | “I want to generate the posts within the app.” | Added a custom Studio tool and a server-side generation endpoint. |
 | “okay the template has a problem. It has the source text rendered at the bottom. I want to remove that” | Removed the source footer from the PNG while preserving the citation in structured content and the frontend. |
 | “how do we automatically generate a replacement?” | Connected rejection notes to background regeneration and resubmission. |

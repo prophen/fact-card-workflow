@@ -38,6 +38,7 @@ Sources: [challenge](https://dev.to/challenges/sanity-2026-09-16), [contest rule
 - [x] Live library and detail page loaded; caption copy and original image download worked.
 - [x] Live search and Published status filter worked.
 - [ ] Open the citation link during the walkthrough.
+- [ ] Suggest five ideas, select one, and generate a post from that exact claim.
 - [ ] Newly generated post reaches In review.
 - [ ] Publish is disabled before approval.
 - [ ] Reject with feedback produces a replacement and returns to In review.
@@ -55,7 +56,7 @@ Do not assume an authenticated local browser proves judge access. If deployment 
 
 ## Evidence already gathered locally
 
-- Latest workflow suite: 16 passing tests, including publication synchronization.
+- Latest workflow and generation suite: 21 passing tests, including publication synchronization.
 - Studio and web production builds passed.
 - Changed-file lint and type checks passed.
 - Search, filters, caption copying, mobile layouts, and image download tested.

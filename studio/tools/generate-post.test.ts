@@ -68,3 +68,39 @@ test('passes revision feedback to both drafting and evidence checking', async ()
   expect(JSON.parse(draft.messages[1].content).revision).toEqual(revision)
   expect(JSON.parse(verification.messages[1].content).revision).toEqual(revision)
 })
+
+test('verifies the selected idea without replacing it with another generated candidate', async () => {
+  const responses = [
+    {
+      results: [
+        {title: 'Historical archive', url: 'https://example.org/archive', highlights: [quote]},
+      ],
+    },
+    {choices: [{message: {content: JSON.stringify(checked)}}]},
+  ]
+  const request = vi.fn(async () => Response.json(responses.shift()))
+  const result = await generatePost('California schools', settings, request, undefined, quote)
+  expect(request).toHaveBeenCalledTimes(2)
+  const calls = request.mock.calls as unknown as [string, RequestInit][]
+  expect(calls[0][0]).toBe('https://api.exa.ai/search')
+  expect(JSON.parse(calls[0][1].body as string).query).toBe(quote)
+  expect(JSON.parse(JSON.parse(calls[1][1].body as string).messages[1].content).candidate).toBe(
+    quote,
+  )
+  expect(result.source.citation).toContain(quote)
+})
+test('selected ideas still require supporting source evidence', async () => {
+  const responses = [
+    {results: [{title: 'Archive', url: 'https://example.org', highlights: [quote]}]},
+    {choices: [{message: {content: '{"verdict":"unsupported"}'}}]},
+  ]
+  await expect(
+    generatePost(
+      'history',
+      settings,
+      async () => Response.json(responses.shift()),
+      undefined,
+      'An unverified idea.',
+    ),
+  ).rejects.toThrow('could not be supported')
+})

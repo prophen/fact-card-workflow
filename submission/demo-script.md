@@ -5,7 +5,7 @@ Aim for 3–4 minutes. Record the real app; trim generation waits and say when t
 | Segment | Show | Suggested narration |
 |---|---|---|
 | 0:00–0:20 | Post library and one completed card | “This is California Black Stories, an editorial workflow for California Black history fact cards. Each card has one fact, a caption, and a source.” |
-| 0:20–0:50 | Studio Generate post tool; enter a topic and start | “I prompted this tool into Studio. It drafts a claim, checks Exa source excerpts, creates the caption, and renders a template PNG. The image is not AI-generated.” |
+| 0:20–0:50 | Studio Generate post tool; suggest five ideas, choose one, and start | “This tool suggests five claim ideas from broad categories. I choose one, then it checks Exa source excerpts, creates the caption, and renders a template PNG. The image is not AI-generated.” |
 | 0:50–1:20 | Open the generated post; show fact, citation, image, In review | “The content and source are structured fields in Sanity. The workflow has moved to In review. The generator cannot approve it.” |
 | 1:20–1:40 | Publish button disabled before approval; Workflow tab | “Publishing is gated by the actual workflow approval, not just the status label.” |
 | 1:40–2:20 | Reject and regenerate; enter a concrete note; return to review | “Rejection sends the post back to generation with my feedback. The Function produces a replacement on the same post. It still needs a new human approval.” |

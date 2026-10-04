@@ -1,5 +1,6 @@
 import { createClient } from "next-sanity";
 import { generatePost } from "@/lib/generate-post";
+import { generateIdeas } from "../../../../../shared/generate-ideas";
 import { renderCard } from "../../../../../shared/render-card";
 
 export const runtime = "nodejs";
@@ -67,32 +68,32 @@ export async function POST(request: Request) {
   }
   if (!user?.id)
     return reply(request, { error: "Sanity authentication failed." }, 403);
-  if (
-    active.has(user.id) ||
-    Date.now() - (lastRequest.get(user.id) || 0) < 10000
-  )
-    return reply(
-      request,
-      {
-        error:
-          "A generation is already running, or was just requested. Please wait.",
-      },
-      429,
-    );
   const openaiKey = process.env.OPENAI_API_KEY;
   const exaKey = process.env.EXA_API_KEY;
-  if (!openaiKey || !exaKey)
-    return reply(
-      request,
-      {
-        error:
-          "Add OPENAI_API_KEY and EXA_API_KEY to the web app’s server environment, then restart it.",
-      },
-      503,
-    );
   let topic: string;
+  let mode: "ideas" | "post" = "post";
+  let candidateClaim: string | undefined;
   try {
     const body = await request.json();
+    if (
+      body.mode !== undefined &&
+      body.mode !== "ideas" &&
+      body.mode !== "post"
+    )
+      return reply(request, { error: "Invalid generation mode." }, 400);
+    mode = body.mode || "post";
+    if (
+      body.candidateClaim !== undefined &&
+      (typeof body.candidateClaim !== "string" ||
+        !body.candidateClaim.trim() ||
+        body.candidateClaim.length > 400)
+    )
+      return reply(
+        request,
+        { error: "Choose a claim idea of 1–400 characters." },
+        400,
+      );
+    candidateClaim = body.candidateClaim?.trim();
     if (
       typeof body.topic !== "string" ||
       !body.topic.trim() ||
@@ -107,16 +108,53 @@ export async function POST(request: Request) {
   } catch {
     return reply(request, { error: "Invalid generation request." }, 400);
   }
+  if (!openaiKey || (mode === "post" && !exaKey))
+    return reply(
+      request,
+      {
+        error:
+          mode === "ideas"
+            ? "Add OPENAI_API_KEY to the web app’s server environment, then restart or redeploy it."
+            : "Add OPENAI_API_KEY and EXA_API_KEY to the web app’s server environment, then restart or redeploy it.",
+      },
+      503,
+    );
+  const requestKey = `${user.id}:${mode}`;
+  if (
+    active.has(user.id) ||
+    Date.now() - (lastRequest.get(requestKey) || 0) < 10000
+  )
+    return reply(
+      request,
+      {
+        error:
+          "A generation is already running, or was just requested. Please wait.",
+      },
+      429,
+    );
   active.add(user.id);
-  lastRequest.set(user.id, Date.now());
+  lastRequest.set(requestKey, Date.now());
   try {
-    const post = await generatePost(topic, {
+    if (mode === "ideas") {
+      const claims = await generateIdeas(topic, {
         openaiKey,
-        exaKey,
         model: process.env.OPENAI_MODEL || "gpt-4o-mini",
       });
+      return reply(request, { claims }, 200);
+    }
+    const post = await generatePost(
+      topic,
+      {
+        openaiKey,
+        exaKey: exaKey!,
+        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+      },
+      fetch,
+      undefined,
+      candidateClaim,
+    );
     const png = await renderCard(post.factText);
-    return reply(request, {...post, cardPng: png.toString('base64')}, 200);
+    return reply(request, { ...post, cardPng: png.toString("base64") }, 200);
   } catch (error) {
     return reply(
       request,

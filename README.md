@@ -44,8 +44,11 @@ See [workflow setup and demo scope](studio/workflows/README.md).
 
 ## Generate posts inside Studio
 
-Open Studio's **Generate post** tab, enter a California Black history topic, and
-click **Generate post**. The tool generates one candidate fact, searches Exa for
+Open Studio’s **Generate post** tab. Start with the prefilled core categories
+and click **Suggest five ideas**, then **Use this idea** to select a specific
+claim. Click **Generate post** to verify that exact idea and create the card.
+You can also type your own topic and generate directly. Suggestions are
+unverified candidates, not approved historical facts. The tool generates one candidate fact, searches Exa for
 source excerpts, checks support, and writes a caption ending in a question. It
 renders the CBS black-and-gold template as a 1080 × 1080 PNG, uploads it to Sanity,
 creates a draft `post` and its workflow, and submits the card to **In review**.
